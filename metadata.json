@@ -1,0 +1,7 @@
+{
+  "name": "MediCore Clinic MS",
+  "description": "Offline-first Clinic Management System using SQLite (WASM) and React.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

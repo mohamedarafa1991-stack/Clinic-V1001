@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MediCore Clinic Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: 'var(--color-primary)',
+              secondary: 'var(--color-secondary)',
+              appBg: 'var(--color-app-bg)',
+              surface: 'var(--color-surface)',
+              borderSubtle: 'var(--color-border)',
+            },
+            animation: {
+              'spin-slow': 'spin 12s linear infinite',
+              'float': 'float 6s ease-in-out infinite',
+              'sway': 'sway 4s ease-in-out infinite',
+              'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Global styles and animations */
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+      
+      :root {
+        /* Base Fallbacks (Default Theme) */
+        --color-primary: #0d9488;
+        --color-secondary: #0f766e;
+        --color-app-bg: #f8fafc;
+        --color-surface: #ffffff;
+        --color-border: #e2e8f0;
+        --color-input-bg: #ffffff;
+      }
+
+      /* --- Theme: Spring --- */
+      .theme-spring {
+        --color-primary: #10b981;
+        --color-secondary: #38bdf8;
+        --color-app-bg: #f0fdf4;
+        --color-surface: #ffffff;
+        --color-border: #d1fae5;
+        --color-input-bg: #ffffff;
+      }
+      .dark.theme-spring {
+        --color-primary: #34d399;
+        --color-secondary: #38bdf8;
+        --color-app-bg: #022c22;
+        --color-surface: #064e3b;
+        --color-border: #065f46;
+        --color-input-bg: #065f46;
+      }
+
+      /* --- Theme: Ramadan --- */
+      .theme-ramadan {
+        --color-primary: #4f46e5;
+        --color-secondary: #fbbf24;
+        --color-app-bg: #f5f3ff;
+        --color-surface: #ffffff;
+        --color-border: #e0e7ff;
+        --color-input-bg: #ffffff;
+      }
+      .dark.theme-ramadan {
+        --color-primary: #818cf8;
+        --color-secondary: #fbbf24;
+        --color-app-bg: #1e1b4b;
+        --color-surface: #312e81;
+        --color-border: #3730a3;
+        --color-input-bg: #312e81;
+      }
+
+      /* --- Theme: Christmas --- */
+      .theme-christmas {
+        --color-primary: #e11d48;
+        --color-secondary: #15803d;
+        --color-app-bg: #fff1f2;
+        --color-surface: #ffffff;
+        --color-border: #ffe4e6;
+        --color-input-bg: #ffffff;
+      }
+      .dark.theme-christmas {
+        --color-primary: #fb7185;
+        --color-secondary: #4ade80;
+        --color-app-bg: #4c0519;
+        --color-surface: #881337;
+        --color-border: #9f1239;
+        --color-input-bg: #881337;
+      }
+
+      /* --- Theme: Halloween --- */
+      .theme-halloween {
+        --color-primary: #f97316;
+        --color-secondary: #9333ea;
+        --color-app-bg: #fff7ed;
+        --color-surface: #ffffff;
+        --color-border: #ffedd5;
+        --color-input-bg: #ffffff;
+      }
+      .dark.theme-halloween {
+        --color-primary: #fb923c;
+        --color-secondary: #a855f7;
+        --color-app-bg: #292524;
+        --color-surface: #1c1917;
+        --color-border: #44403c;
+        --color-input-bg: #1c1917;
+      }
+
+      /* --- Theme: None (Default / Custom) --- */
+      /* These serve as fallbacks if inline styles aren't set, usually matching the Teal default */
+      .theme-none {
+        --color-primary: #0d9488;
+        --color-secondary: #0f766e;
+        --color-app-bg: #f8fafc;
+        --color-surface: #ffffff;
+        --color-border: #e2e8f0;
+        --color-input-bg: #ffffff;
+      }
+      .dark.theme-none {
+        --color-primary: #0d9488;
+        --color-secondary: #0f766e;
+        --color-app-bg: #0f172a;
+        --color-surface: #1e293b;
+        --color-border: #334155;
+        --color-input-bg: #1e293b;
+      }
+
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: var(--color-app-bg);
+        color: #1e293b;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        transition: background-color 0.5s ease, color 0.5s ease;
+      }
+
+      .dark body {
+        color: #f1f5f9;
+      }
+
+      @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; }
+
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-15px); }
+      }
+      @keyframes sway {
+        0%, 100% { transform: rotate(-3deg); }
+        50% { transform: rotate(3deg); }
+      }
+
+      /* Custom scrollbar */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+      .dark ::-webkit-scrollbar-thumb { background: #334155; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+      /* Inputs */
+      input:not([type='submit']):not([type='button']):not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']), 
+      select, textarea {
+        background-color: var(--color-input-bg) !important;
+      }
+      .dark input:not([type='submit']):not([type='button']):not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']), 
+      .dark select, .dark textarea {
+        background-color: var(--color-input-bg) !important;
+        border-color: var(--color-border) !important;
+        color: inherit !important;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "jspdf": "https://esm.sh/jspdf@^4.0.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "jspdf-autotable": "https://esm.sh/jspdf-autotable@^5.0.2",
+    "date-fns": "https://esm.sh/date-fns@^4.1.0",
+    "xlsx": "https://esm.sh/xlsx@0.18.5",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
