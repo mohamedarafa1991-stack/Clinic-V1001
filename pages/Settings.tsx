@@ -1,84 +1,63 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { dbService } from '../services/db';
 import { useAuth } from '../contexts/AuthContext';
+import { useShortcuts } from '../contexts/ShortcutContext';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { syncService } from '../services/sync';
 import { hashPassword } from '../utils/security';
-import { Save, Upload, Trash2, Users, Settings as SettingsIcon, Plus, Shield, User, Check, X, Moon, Sun, Database, FileText, FileSpreadsheet, FileType, Snowflake, Moon as MoonIcon, Flower, Ghost, Building2, MapPin, Phone, Image as ImageIcon } from 'lucide-react';
-import { UserRole } from '../types';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { 
+  Save, Upload, Trash2, Users, Settings as SettingsIcon, Plus, 
+  Database, Moon, Sun, Palette, Keyboard, RefreshCcw, Wifi, Server, X, Globe, Lock, User as UserIcon, Shield,
+  CheckCircle, RotateCcw, Stethoscope, Activity, Calendar, DollarSign, Briefcase, Info, CheckSquare, Edit3, Tag, Library
+} from 'lucide-react';
+import { UserRole, Specialty, DoctorTitle } from '../types';
 import { OCCASION_THEMES } from '../services/themeConfig';
 
 const Settings = () => {
   const { user } = useAuth();
+  const { shortcuts } = useShortcuts();
+  const { language, setLanguage, saveLanguage, revertLanguage, isDirty: isLangDirty, t, dir } = useLanguage();
+  const { settings, updatePreview, saveChanges: saveTheme, revertChanges: revertTheme, isDirty: isThemeDirty } = useTheme();
+  
   const isAdmin = user?.role === UserRole.ADMIN;
+  const isElectron = !!window.electronAPI;
 
-  const [activeTab, setActiveTab] = useState<'general' | 'users' | 'data'>('general');
-  const [colors, setColors] = useState({ 
-    primary: '#0d9488',
-    secondary: '#0f766e',
-    inputBg: '#ffffff'
-  });
-  const [isDark, setIsDark] = useState(false);
-  const [activeDecoration, setActiveDecoration] = useState('none');
-  const [clinicInfo, setClinicInfo] = useState({
-      name: 'MediCore Clinic',
-      address: '',
-      phone: '',
-      logo: ''
-  });
-
+  const [activeTab, setActiveTab] = useState<'general' | 'users' | 'metadata' | 'data' | 'shortcuts' | 'sync'>('general');
+  const [appVersion, setAppVersion] = useState('');
+  
   // User Management State
   const [users, setUsers] = useState<any[]>([]);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [showUserModal, setShowUserModal] = useState(false);
-  const [userForm, setUserForm] = useState({ 
-    id: 0, 
-    name: '', 
-    email: '', 
-    password: '', 
-    role: UserRole.RECEPTIONIST, 
-    relatedId: 0 
-  });
+  const [userForm, setUserForm] = useState({ id: 0, name: '', email: '', password: '', role: UserRole.RECEPTIONIST, relatedId: 0 });
 
-  // Export State
-  const [exportScope, setExportScope] = useState('all');
+  // Clinical Metadata State
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  const [titles, setTitles] = useState<DoctorTitle[]>([]);
+  const [showSpecModal, setShowSpecModal] = useState(false);
+  const [showTitleModal, setShowTitleModal] = useState(false);
+  const [specForm, setSpecForm] = useState<Partial<Specialty>>({ name: '', category: 'Primary Care' });
+  const [titleForm, setTitleForm] = useState<Partial<DoctorTitle>>({ name: '' });
 
+  // Sync State
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [peers, setPeers] = useState<string[]>([]);
+  const [syncLog, setSyncLog] = useState<string[]>([]);
+
+  // Init
   useEffect(() => {
-      const settings = dbService.query("SELECT * FROM settings");
-      const p = settings.find((s: any) => s.key === 'primary_color')?.value;
-      const s = settings.find((s: any) => s.key === 'secondary_color')?.value;
-      const i = settings.find((s: any) => s.key === 'input_bg_color')?.value;
-      const t = settings.find((s: any) => s.key === 'theme_mode')?.value;
-      const d = settings.find((s: any) => s.key === 'active_decoration')?.value;
-      
-      const cName = settings.find((s: any) => s.key === 'clinic_name')?.value;
-      const cAddr = settings.find((s: any) => s.key === 'clinic_address')?.value;
-      const cPhone = settings.find((s: any) => s.key === 'clinic_phone')?.value;
-      const cLogo = settings.find((s: any) => s.key === 'clinic_logo')?.value;
-
-      if (p) {
-          setColors({ 
-              primary: p, 
-              secondary: s || '#0f766e', 
-              inputBg: i || '#ffffff' 
-          });
+      if (isElectron) {
+          window.electronAPI!.getVersion().then(setAppVersion);
       }
-      setIsDark(t === 'dark');
-      if (d) setActiveDecoration(d);
-      
-      setClinicInfo({
-          name: cName || 'MediCore Clinic',
-          address: cAddr || '',
-          phone: cPhone || '',
-          logo: cLogo || ''
-      });
-
   }, []);
 
-  useEffect(() => {
-      if (activeTab === 'users') loadUsers();
+  useEffect(() => { 
+      if (activeTab === 'users') loadUsers(); 
+      if (activeTab === 'metadata') loadMetadata();
+      if (activeTab === 'sync') syncService.discoverPeers().then(setPeers);
   }, [activeTab]);
 
   const loadUsers = () => {
@@ -86,471 +65,628 @@ const Settings = () => {
       setDoctors(dbService.query("SELECT * FROM doctors"));
   };
 
+  const loadMetadata = () => {
+      setSpecialties(dbService.query("SELECT * FROM specialties ORDER BY category, name"));
+      setTitles(dbService.query("SELECT * FROM doctor_titles ORDER BY name"));
+  };
+
   const handleThemeSelection = (themeId: string) => {
-      setActiveDecoration(themeId);
-      const themeDef = OCCASION_THEMES[themeId];
-      if (themeDef) {
-          const t = themeDef.colors.light;
-          setColors({
-              primary: t.primary,
-              secondary: t.secondary,
-              inputBg: t.inputBg
-          });
-      }
+      updatePreview({ decoration: themeId });
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) { // 2MB Limit
-        alert("File too large. Please upload an image smaller than 2MB.");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setClinicInfo(prev => ({ ...prev, logo: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
+  const handleApplyChanges = () => {
+      if (isThemeDirty) saveTheme();
+      if (isLangDirty) saveLanguage();
   };
 
-  const handleSaveGeneral = async () => {
-    // Save Clinic Info
-    dbService.exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('clinic_name', ?)", [clinicInfo.name]);
-    dbService.exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('clinic_address', ?)", [clinicInfo.address]);
-    dbService.exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('clinic_phone', ?)", [clinicInfo.phone]);
-    dbService.exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('clinic_logo', ?)", [clinicInfo.logo]);
-
-    // Save Theme Info
-    dbService.exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('primary_color', ?)", [colors.primary]);
-    dbService.exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('secondary_color', ?)", [colors.secondary]);
-    dbService.exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('input_bg_color', ?)", [colors.inputBg]);
-    dbService.exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('theme_mode', ?)", [isDark ? 'dark' : 'light']);
-    dbService.exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('active_decoration', ?)", [activeDecoration]);
-    
-    // Apply visual changes immediately
-    const root = document.documentElement;
-    
-    if (isDark) {
-        root.classList.add('dark');
-    } else {
-        root.classList.remove('dark');
-    }
-
-    root.classList.remove('theme-spring', 'theme-ramadan', 'theme-christmas', 'theme-halloween', 'theme-none');
-    
-    if (activeDecoration !== 'none') {
-        root.classList.add(`theme-${activeDecoration}`);
-        root.style.removeProperty('--color-primary');
-        root.style.removeProperty('--color-secondary');
-        root.style.removeProperty('--color-app-bg');
-        root.style.removeProperty('--color-surface');
-        root.style.removeProperty('--color-border');
-        root.style.removeProperty('--color-input-bg');
-    } else {
-        root.classList.add('theme-none');
-        root.style.setProperty('--color-primary', colors.primary);
-        root.style.setProperty('--color-secondary', colors.secondary);
-        root.style.setProperty('--color-input-bg', colors.inputBg);
-    }
-
-    window.dispatchEvent(new Event('medicore-theme-change'));
-    window.dispatchEvent(new Event('medicore-logo-change')); // Trigger logo update
-    alert('Settings saved successfully!');
+  const handleRevertChanges = () => {
+      if (isThemeDirty) revertTheme();
+      if (isLangDirty) revertLanguage();
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) dbService.importBackup(file);
-  };
-
-  // --- Export Logic ---
-  const getExportData = (scope: string) => {
-      const data: any = {};
-      if (scope === 'patients' || scope === 'all') {
-          data.patients = dbService.query("SELECT id, name, phone, email, gender, dob, blood_group, allergies, chronic_conditions, address FROM patients");
+  const handleUserSave = async (e: React.FormEvent) => {
+      e.preventDefault();
+      let passHash = userForm.password;
+      if (userForm.password && userForm.password.length < 50) { 
+          passHash = await hashPassword(userForm.password);
       }
-      if (scope === 'doctors' || scope === 'all') {
-          data.doctors = dbService.query("SELECT id, name, specialty, phone, email, fee FROM doctors");
-      }
-      if (scope === 'appointments' || scope === 'all') {
-          data.appointments = dbService.query(`SELECT a.id, a.date, a.time, p.name as patient, d.name as doctor, a.status, a.type, a.totalFee, a.amountPaid, a.paymentStatus FROM appointments a LEFT JOIN patients p ON a.patientId = p.id LEFT JOIN doctors d ON a.doctorId = d.id`);
-      }
-      if (scope === 'inventory' || scope === 'all') {
-          // Removed price from selection
-          data.inventory = dbService.query("SELECT id, name, generic, form, concentration, manufacturer, stock, expiry FROM medicines");
-      }
-      return data;
-  };
-
-  const exportData = (format: 'csv' | 'excel' | 'pdf') => {
-      const dataMap = getExportData(exportScope);
-      const dateStr = new Date().toISOString().split('T')[0];
-      const filename = `medicore_export_${exportScope}_${dateStr}`;
-
-      if (format === 'excel') {
-          const wb = XLSX.utils.book_new();
-          Object.keys(dataMap).forEach(key => {
-              const ws = XLSX.utils.json_to_sheet(dataMap[key]);
-              XLSX.utils.book_append_sheet(wb, ws, key.charAt(0).toUpperCase() + key.slice(1));
-          });
-          XLSX.writeFile(wb, `${filename}.xlsx`);
-      } 
-      else if (format === 'csv') {
-          const keys = Object.keys(dataMap);
-          if (keys.length > 1) {
-              alert("For 'All Data', please use Excel. Downloading 'Appointments' data as CSV fallback.");
-              const key = dataMap.appointments ? 'appointments' : keys[0];
-              const ws = XLSX.utils.json_to_sheet(dataMap[key]);
-              const csv = XLSX.utils.sheet_to_csv(ws);
-              const blob = new Blob([csv], { type: 'text/csv' });
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `medicore_${key}_${dateStr}.csv`;
-              a.click();
-          } else {
-              const key = keys[0];
-              const ws = XLSX.utils.json_to_sheet(dataMap[key]);
-              const csv = XLSX.utils.sheet_to_csv(ws);
-              const blob = new Blob([csv], { type: 'text/csv' });
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `${filename}.csv`;
-              a.click();
-          }
-      }
-      else if (format === 'pdf') {
-          const doc = new jsPDF();
-          doc.text(`MediCore Data Export: ${exportScope.toUpperCase()}`, 14, 15);
-          doc.setFontSize(10);
-          doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 22);
-          
-          let yPos = 30;
-          Object.keys(dataMap).forEach((key, index) => {
-              if (index > 0) { doc.addPage(); yPos = 20; }
-              doc.setFontSize(14);
-              doc.text(key.charAt(0).toUpperCase() + key.slice(1), 14, yPos);
-              const rows = dataMap[key].map((row: any) => Object.values(row).map(v => String(v)));
-              const headers = dataMap[key].length > 0 ? Object.keys(dataMap[key][0]) : [];
-              autoTable(doc, { head: [headers], body: rows, startY: yPos + 5, theme: 'grid', headStyles: { fillColor: [13, 148, 136] }, styles: { fontSize: 8 } });
-          });
-          doc.save(`${filename}.pdf`);
-      }
-  };
-
-  // --- User Management Handlers ---
-
-  const handleSaveUser = async () => {
-      if (!userForm.name || !userForm.email || !userForm.role) {
-          alert("Please fill in required fields.");
-          return;
-      }
-      if (!userForm.id && !userForm.password) {
-          alert("Password is required for new users.");
-          return;
-      }
-
-      try {
-          let hashedPassword = userForm.password;
+      if (userForm.id) {
           if (userForm.password) {
-              hashedPassword = await hashPassword(userForm.password);
-          }
-
-          if (userForm.id) {
-              if (userForm.password) {
-                  dbService.exec("UPDATE users SET name=?, email=?, role=?, relatedId=?, password=? WHERE id=?", [
-                      userForm.name, userForm.email, userForm.role, userForm.relatedId || null, hashedPassword, userForm.id
-                  ]);
-              } else {
-                   dbService.exec("UPDATE users SET name=?, email=?, role=?, relatedId=? WHERE id=?", [
-                      userForm.name, userForm.email, userForm.role, userForm.relatedId || null, userForm.id
-                  ]);
-              }
-              dbService.logAudit(user?.id || 0, 'USER_UPDATE', `Updated user ${userForm.name} (${userForm.role})`);
+              dbService.exec("UPDATE users SET name=?, email=?, role=?, relatedId=?, password=? WHERE id=?", [userForm.name, userForm.email, userForm.role, userForm.relatedId, passHash, userForm.id]);
           } else {
-              dbService.exec("INSERT INTO users (name, email, password, role, relatedId) VALUES (?, ?, ?, ?, ?)", [
-                   userForm.name, userForm.email, hashedPassword, userForm.role, userForm.relatedId || null
-              ]);
-              dbService.logAudit(user?.id || 0, 'USER_CREATE', `Created user ${userForm.name} (${userForm.role})`);
+              dbService.exec("UPDATE users SET name=?, email=?, role=?, relatedId=? WHERE id=?", [userForm.name, userForm.email, userForm.role, userForm.relatedId, userForm.id]);
           }
-          setShowUserModal(false);
-          loadUsers();
-      } catch (e) {
-          alert("Error saving user. Email might be duplicate.");
+      } else {
+          dbService.exec("INSERT INTO users (name, email, password, role, relatedId) VALUES (?, ?, ?, ?, ?)", [userForm.name, userForm.email, passHash, userForm.role, userForm.relatedId]);
       }
+      setShowUserModal(false);
+      loadUsers();
   };
 
   const deleteUser = (id: number) => {
-      if(confirm("Delete this user account permanently?")) {
+      if(confirm(t('confirm_delete'))) {
           dbService.exec("DELETE FROM users WHERE id=?", [id]);
-          dbService.logAudit(user?.id || 0, 'USER_DELETE', `Deleted user ID ${id}`);
           loadUsers();
       }
   };
 
-  const openUserModal = (u?: any) => {
-      if (u) {
-          setUserForm({ ...u, password: '' });
+  const handleSpecSave = (e: React.FormEvent) => {
+      e.preventDefault();
+      if(!specForm.name) return;
+      if(specForm.id) {
+          dbService.exec("UPDATE specialties SET name=?, category=? WHERE id=?", [specForm.name, specForm.category, specForm.id]);
       } else {
-          setUserForm({ id: 0, name: '', email: '', password: '', role: UserRole.RECEPTIONIST, relatedId: 0 });
+          dbService.exec("INSERT INTO specialties (name, category) VALUES (?, ?)", [specForm.name, specForm.category]);
       }
-      setShowUserModal(true);
+      setShowSpecModal(false);
+      loadMetadata();
   };
 
-  const roleDefinitions = [
+  const deleteSpec = (id: number) => {
+      if(confirm(t('confirm_delete'))) {
+          dbService.exec("DELETE FROM specialties WHERE id=?", [id]);
+          loadMetadata();
+      }
+  };
+
+  const handleTitleSave = (e: React.FormEvent) => {
+      e.preventDefault();
+      if(!titleForm.name) return;
+      if(titleForm.id) {
+          dbService.exec("UPDATE doctor_titles SET name=? WHERE id=?", [titleForm.name, titleForm.id]);
+      } else {
+          dbService.exec("INSERT INTO doctor_titles (name) VALUES (?)", [titleForm.name]);
+      }
+      setShowTitleModal(false);
+      loadMetadata();
+  };
+
+  const deleteTitle = (id: number) => {
+      const inUse = dbService.query("SELECT COUNT(*) as c FROM doctors WHERE title IN (SELECT name FROM doctor_titles WHERE id = ?)", [id])[0].c > 0;
+      if (inUse) {
+          alert("Cannot delete this title as it is assigned to one or more doctors.");
+          return;
+      }
+      if(confirm(t('confirm_delete'))) {
+          dbService.exec("DELETE FROM doctor_titles WHERE id=?", [id]);
+          loadMetadata();
+      }
+  };
+
+  const runSync = async (peer: string) => {
+      setIsSyncing(true);
+      setSyncLog(prev => [`Connecting to ${peer}...`, ...prev]);
+      try {
+          const stats = await syncService.syncWithPeer(peer);
+          setSyncLog(prev => [`Sync Complete: Added ${stats.added}, Updated ${stats.updated}, Conflicts ${stats.conflicts}`, ...prev]);
+      } catch (e) {
+          setSyncLog(prev => [`Error syncing with ${peer}`, ...prev]);
+      }
+      setIsSyncing(false);
+  };
+
+  const ROLE_CARDS = [
     { 
         role: UserRole.ADMIN, 
-        label: 'Administrator',
-        desc: 'Full system access. Can manage settings, users, finances, and delete records.',
-        color: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'
+        icon: Shield, 
+        colorClass: 'text-purple-600 bg-purple-50 dark:text-purple-300 dark:bg-purple-900/20 dark:border-purple-800', 
+        badges: ['badge_system', 'badge_admin'], 
+        descKey: 'role_desc_admin', 
+        permsKey: 'role_perms_admin' 
     },
     { 
         role: UserRole.DOCTOR, 
-        label: 'Doctor', 
-        desc: 'Clinical access. Sees own appointments, manages patients, and handles prescriptions.', 
-        color: 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400' 
-    },
-    { 
-        role: UserRole.RECEPTIONIST, 
-        label: 'Receptionist',
-        desc: 'Front desk operations. Manages patient registration, appointments, and provider schedules.',
-        color: 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400'
+        icon: Stethoscope, 
+        colorClass: 'text-blue-600 bg-blue-50 dark:text-blue-300 dark:bg-blue-900/20 dark:border-blue-800', 
+        badges: ['badge_clinical', 'badge_admin'], 
+        descKey: 'role_desc_doctor', 
+        permsKey: 'role_perms_doctor' 
     },
     { 
         role: UserRole.NURSE, 
-        label: 'Nurse',
-        desc: 'Patient care support. Can view patient history, triage visits, and manage pharmacy stock.',
-        color: 'bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800 dark:text-indigo-400'
+        icon: Activity, 
+        colorClass: 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-900/20 dark:border-rose-800', 
+        badges: ['badge_clinical'], 
+        descKey: 'role_desc_nurse', 
+        permsKey: 'role_perms_nurse' 
+    },
+    { 
+        role: UserRole.RECEPTIONIST, 
+        icon: Calendar, 
+        colorClass: 'text-orange-600 bg-orange-50 dark:text-orange-300 dark:bg-orange-900/20 dark:border-orange-800', 
+        badges: ['badge_admin'], 
+        descKey: 'role_desc_receptionist', 
+        permsKey: 'role_perms_receptionist' 
     },
     { 
         role: UserRole.BILLING, 
-        label: 'Billing Agent',
-        desc: 'Financial focus. Access to invoices, payment history, and revenue reports only.',
-        color: 'bg-orange-50 text-orange-700 border-orange-100 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400'
+        icon: DollarSign, 
+        colorClass: 'text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-900/20 dark:border-emerald-800', 
+        badges: ['badge_financial', 'badge_admin'], 
+        descKey: 'role_desc_billing', 
+        permsKey: 'role_perms_billing' 
     }
   ];
 
-  const decorations = [
-      { id: 'none', label: 'Default', icon: <Check size={20}/> },
-      { id: 'spring', label: 'Spring', icon: <Flower size={20}/> },
-      { id: 'ramadan', label: 'Ramadan', icon: <MoonIcon size={20}/> },
-      { id: 'christmas', label: 'Christmas', icon: <Snowflake size={20}/> },
-      { id: 'halloween', label: 'Halloween', icon: <Ghost size={20}/> },
-  ];
-
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-12">
-        {/* Tab Navigation */}
-        <div className="flex gap-6 border-b border-borderSubtle overflow-x-auto">
-            <button className={`pb-4 px-2 font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${activeTab === 'general' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-gray-500 dark:text-gray-400'}`} onClick={() => setActiveTab('general')}><SettingsIcon size={18} /> General Settings</button>
-            <button className={`pb-4 px-2 font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${activeTab === 'users' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-gray-500 dark:text-gray-400'}`} onClick={() => setActiveTab('users')}><Users size={18} /> Users & Roles</button>
-            {isAdmin && (<button className={`pb-4 px-2 font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${activeTab === 'data' ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-gray-500 dark:text-gray-400'}`} onClick={() => setActiveTab('data')}><Database size={18} /> Data Management</button>)}
+    <div className="max-w-6xl mx-auto space-y-8 pb-32" dir={dir}>
+        {/* Navigation Tabs */}
+        <div className="flex gap-4 border-b border-gray-200 dark:border-slate-800 overflow-x-auto pb-1">
+            {[
+                { id: 'general', icon: SettingsIcon, label: 'settings' },
+                { id: 'users', icon: Users, label: 'user_roles' },
+                ...(isAdmin ? [
+                    { id: 'metadata', icon: Library, label: 'clinical_metadata' }
+                ] : []),
+                { id: 'shortcuts', icon: Keyboard, label: 'shortcuts' },
+                ...(isAdmin ? [{ id: 'data', icon: Database, label: 'backup_restore' }, { id: 'sync', icon: RefreshCcw, label: 'network_sync' }] : [])
+            ].map(tab => (
+                <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`pb-3 px-4 font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${activeTab === tab.id ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+                >
+                    <tab.icon size={18} className="rtl:flip-x" /> {t(tab.label as any)}
+                </button>
+            ))}
         </div>
         
+        {/* GENERAL TAB */}
         {activeTab === 'general' && (
             <div className="animate-fade-in-up space-y-8">
-                {/* Clinic Profile Section */}
-                <div className="bg-surface p-6 rounded-2xl shadow-sm border border-borderSubtle">
-                     <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6 flex items-center gap-2">
-                        <Building2 size={20} className="text-[var(--color-primary)]" /> Clinic Profile
-                     </h3>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                         <div className="md:col-span-2">
-                             <div className="flex items-start gap-6 mb-6">
-                                 <div className="shrink-0 relative group">
-                                     <div className="w-24 h-24 rounded-2xl bg-gray-100 dark:bg-slate-800 border-2 border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center overflow-hidden">
-                                         {clinicInfo.logo ? (
-                                             <img src={clinicInfo.logo} alt="Logo" className="w-full h-full object-contain p-2" />
-                                         ) : (
-                                             <ImageIcon className="text-gray-300 dark:text-slate-600" size={32} />
-                                         )}
-                                     </div>
-                                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 text-white font-bold opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl cursor-pointer text-xs">
-                                         Upload
-                                         <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                                     </label>
-                                 </div>
-                                 <div className="flex-1">
-                                     <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Clinic Name</label>
-                                     <input 
-                                        className="w-full border border-gray-200 dark:border-slate-700 p-3 rounded-xl bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-all"
-                                        value={clinicInfo.name}
-                                        onChange={e => setClinicInfo({...clinicInfo, name: e.target.value})}
-                                        placeholder="e.g. MediCore Clinic"
-                                     />
-                                     <p className="text-xs text-gray-400 mt-2">Upload a PNG or JPG logo (max 2MB) to appear on the login screen and sidebar.</p>
-                                 </div>
-                             </div>
-                         </div>
-                         <div>
-                             <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 flex items-center gap-1"><MapPin size={12}/> Address</label>
-                             <input 
-                                className="w-full border border-gray-200 dark:border-slate-700 p-3 rounded-xl bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-all"
-                                value={clinicInfo.address}
-                                onChange={e => setClinicInfo({...clinicInfo, address: e.target.value})}
-                                placeholder="Street, City"
-                             />
-                         </div>
-                         <div>
-                             <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 flex items-center gap-1"><Phone size={12}/> Contact Phone</label>
-                             <input 
-                                className="w-full border border-gray-200 dark:border-slate-700 p-3 rounded-xl bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-all"
-                                value={clinicInfo.phone}
-                                onChange={e => setClinicInfo({...clinicInfo, phone: e.target.value})}
-                                placeholder="(555) 000-0000"
-                             />
-                         </div>
-                     </div>
-                </div>
-
-                {/* Theme Section */}
-                <div className="bg-surface p-6 rounded-2xl shadow-sm border border-borderSubtle">
-                    <div className="flex items-center justify-between mb-8 pb-8 border-b border-gray-100 dark:border-slate-700">
-                        <div><label className="text-sm font-bold text-gray-700 dark:text-gray-200 block mb-1">Interface Theme</label><p className="text-xs text-gray-500 dark:text-gray-400">Toggle light/dark modes.</p></div>
-                        <button onClick={() => setIsDark(!isDark)} className={`relative w-16 h-8 rounded-full transition-colors flex items-center px-1 ${isDark ? 'bg-slate-700' : 'bg-orange-100'}`}><div className={`w-6 h-6 rounded-full shadow-sm transform transition-transform duration-300 flex items-center justify-center ${isDark ? 'translate-x-8 bg-slate-900 text-yellow-400' : 'translate-x-0 bg-white text-orange-500'}`}>{isDark ? <Moon size={14} /> : <Sun size={14} />}</div></button>
-                    </div>
-                    <div className="mb-8 pb-8 border-b border-gray-100 dark:border-slate-700">
-                        <label className="text-sm font-bold text-gray-700 dark:text-gray-200 block mb-3">Active Occasion Theme</label>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                            {decorations.map((d) => (
-                                <button key={d.id} onClick={() => handleThemeSelection(d.id)} className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${activeDecoration === d.id ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 dark:bg-[var(--color-primary)]/20' : 'border-transparent hover:bg-gray-50 dark:hover:bg-slate-700'}`}>
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-gray-300 ${activeDecoration === d.id ? 'text-[var(--color-primary)]' : ''}`}>{d.icon}</div>
-                                    <span className={`text-xs font-bold ${activeDecoration === d.id ? 'text-[var(--color-primary)]' : 'text-gray-500 dark:text-gray-400'}`}>{d.label}</span>
-                                    {activeDecoration === d.id && (<div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[var(--color-primary)]" />)}
-                                </button>
-                            ))}
-                        </div>
+                {/* Language Settings */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800">
+                    <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white flex items-center gap-2"><Globe size={20}/> {t('language')}</h3>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => setLanguage('en')}
+                            className={`px-4 py-2 rounded-lg border flex items-center gap-2 font-bold transition-all ${language === 'en' ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : 'bg-white dark:bg-slate-800 dark:text-white border-gray-200 dark:border-slate-700'}`}
+                        >
+                            <span className="text-lg">🇺🇸</span> English
+                        </button>
+                        <button 
+                            onClick={() => setLanguage('ar')}
+                            className={`px-4 py-2 rounded-lg border flex items-center gap-2 font-bold transition-all ${language === 'ar' ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : 'bg-white dark:bg-slate-800 dark:text-white border-gray-200 dark:border-slate-700'}`}
+                        >
+                            <span className="text-lg">🇪🇬</span> العربية
+                        </button>
                     </div>
                 </div>
 
-                <div className="flex justify-end">
-                    <button onClick={handleSaveGeneral} className="flex items-center gap-2 bg-gray-900 dark:bg-slate-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-black transition-all shadow-lg shadow-gray-200 dark:shadow-none border border-transparent dark:border-slate-700"><Save size={18} /> Save Settings</button>
+                {/* Theme Selector */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800">
+                    <h3 className="text-lg font-bold mb-6 text-gray-800 dark:text-white flex items-center gap-2"><Palette size={20}/> {t('theme')}</h3>
+                    <div className="flex items-center gap-4 mb-6">
+                        <button onClick={() => updatePreview({ mode: settings.mode === 'dark' ? 'light' : 'dark' })} className="p-2 bg-gray-100 dark:bg-slate-800 rounded-lg flex items-center gap-2 text-sm font-bold dark:text-white border border-transparent hover:border-[var(--color-primary)] transition-all">
+                            {settings.mode === 'dark' ? <Moon size={16}/> : <Sun size={16}/>} {settings.mode === 'dark' ? 'Dark Mode' : 'Light Mode'}
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {Object.entries(OCCASION_THEMES).map(([key, theme]) => (
+                            <button key={key} onClick={() => handleThemeSelection(key)} className={`p-4 border rounded-xl text-left transition-all ${settings.decoration === key ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 ring-1 ring-[var(--color-primary)]' : 'border-gray-200 dark:border-slate-700'}`}>
+                                <span className="block font-bold text-sm text-gray-800 dark:text-white">{theme.name}</span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
         )}
 
-        {/* ... Users Tab ... */}
+        {/* USERS TAB */}
         {activeTab === 'users' && (
-             <div className="space-y-6 animate-fade-in-up">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-blue-50 dark:bg-blue-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-800">
-                    <div><h3 className="text-lg font-bold text-blue-900 dark:text-blue-200">User Access Control</h3><p className="text-sm text-blue-700 dark:text-blue-300 mt-1">Create accounts for staff members and assign their roles.</p></div>
-                    <button onClick={() => openUserModal()} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-blue-700 transition-all"><Plus size={18} /> Add New User</button>
+            <div className="animate-fade-in-up space-y-8">
+                <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white">{t('user_roles')}</h3>
+                        <p className="text-sm text-gray-500">{t('user_roles_desc')}</p>
+                    </div>
+                    <button 
+                        onClick={() => {
+                            setUserForm({ id: 0, name: '', email: '', password: '', role: UserRole.RECEPTIONIST, relatedId: 0 });
+                            setShowUserModal(true);
+                        }}
+                        className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-[var(--color-primary)]/20"
+                    >
+                        <Plus size={18}/> {t('add_user')}
+                    </button>
                 </div>
-                <div className="bg-surface border border-borderSubtle rounded-2xl overflow-hidden shadow-sm">
-                    <table className="w-full text-left">
-                        <thead className="bg-gray-50 dark:bg-slate-700/50 border-b border-gray-100 dark:border-slate-700 text-xs uppercase text-gray-500 dark:text-gray-400 font-bold"><tr><th className="p-4">Staff Member</th><th className="p-4">Access Role</th><th className="p-4">Profile Link</th><th className="p-4 text-right">Actions</th></tr></thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                            {users.map(u => (
-                                <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/30 transition">
-                                    <td className="p-4"><div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-sm text-white ${u.role === UserRole.ADMIN ? 'bg-slate-800' : 'bg-[var(--color-primary)]'}`}>{u.name.charAt(0)}</div><div><p className="font-bold text-gray-800 dark:text-gray-200 text-sm">{u.name}</p><p className="text-xs text-gray-500 dark:text-gray-400">{u.email}</p></div></div></td>
-                                    <td className="p-4"><span className="text-[10px] font-bold uppercase px-2 py-1 rounded border bg-slate-50 dark:bg-slate-800">{u.role}</span></td>
-                                    <td className="p-4 text-sm text-gray-500 dark:text-gray-400">{u.relatedId ? <span className="flex items-center gap-1.5 text-emerald-600 font-bold text-xs"><Check size={12} /> Linked</span> : <span className="text-gray-400 text-xs italic">Unlinked</span>}</td>
-                                    <td className="p-4 text-right"><div className="flex justify-end gap-2"><button onClick={() => openUserModal(u)} className="p-2 border rounded-lg text-gray-400 hover:text-blue-600"><SettingsIcon size={16} /></button><button onClick={() => deleteUser(u.id)} className="p-2 border rounded-lg text-gray-400 hover:text-red-600"><Trash2 size={16} /></button></div></td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {roleDefinitions.map((def) => (
-                        <div key={def.role} className={`p-4 rounded-xl border ${def.color}`}>
-                            <div className="flex items-center gap-2 mb-1">
-                                <Shield size={16} />
-                                <h4 className="font-bold text-sm uppercase tracking-wider">{def.label}</h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {users.map(u => (
+                        <div key={u.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                            <div className="absolute top-0 right-0 rtl:left-0 rtl:right-auto p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                <Shield size={64} />
                             </div>
-                            <p className="text-xs opacity-90 leading-relaxed">{def.desc}</p>
+                            
+                            <div className="flex justify-between items-start mb-4 relative z-10">
+                                <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center text-xl font-bold text-gray-500 dark:text-gray-300">
+                                    {u.name.charAt(0)}
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => { setUserForm({...u, password: ''}); setShowUserModal(true); }} className="p-2 text-gray-400 hover:text-[var(--color-primary)] hover:bg-gray-50 dark:hover:bg-slate-700 rounded-lg transition-colors"><SettingsIcon size={16}/></button>
+                                    <button onClick={() => deleteUser(u.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                                </div>
+                            </div>
+                            
+                            <div className="relative z-10">
+                                <h4 className="font-bold text-gray-800 dark:text-white text-lg">{u.name}</h4>
+                                <p className="text-sm text-gray-500 mb-3">{u.email}</p>
+                                
+                                <div className="flex flex-wrap gap-2">
+                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wide border ${
+                                        u.role === UserRole.ADMIN ? 'bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800' :
+                                        u.role === UserRole.DOCTOR ? 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800' :
+                                        'bg-gray-50 text-gray-600 border-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+                                    }`}>
+                                        {t(u.role as any) || u.role}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     ))}
                 </div>
+
+                {/* Role Descriptions */}
+                <div className="mt-8 border-t border-gray-100 dark:border-slate-800 pt-8">
+                    <div className="mb-6">
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white">{t('role_responsibilities')}</h3>
+                        <p className="text-sm text-gray-500">{t('role_responsibilities_desc')}</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {ROLE_CARDS.map((card) => (
+                            <div key={card.role} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-gray-200 dark:border-slate-800 hover:shadow-md transition-all">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <div className={`p-2 rounded-lg ${card.colorClass}`}>
+                                        <card.icon size={20} />
+                                    </div>
+                                    <h4 className="font-bold text-gray-800 dark:text-white capitalize">{t(card.role as any)}</h4>
+                                </div>
+                                <p className="text-xs text-gray-600 dark:text-gray-300 mb-4 min-h-[40px] leading-relaxed">
+                                    {t(card.descKey as any)}
+                                </p>
+                                <div className="flex flex-wrap gap-1.5 mb-4">
+                                    {card.badges.map(b => (
+                                        <span key={b} className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-slate-700">
+                                            {t(b as any)}
+                                        </span>
+                                    ))}
+                                </div>
+                                <div className="pt-3 border-t border-gray-100 dark:border-slate-800">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Access</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate" title={t(card.permsKey as any)}>{t(card.permsKey as any)}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
         )}
 
-        {/* ... Data Tab (Same as before) ... */}
-        {activeTab === 'data' && isAdmin && (
+        {/* CLINICAL METADATA TAB */}
+        {activeTab === 'metadata' && (
             <div className="animate-fade-in-up space-y-8">
-                {/* Export Section */}
-                <div className="bg-surface p-6 rounded-2xl shadow-sm border border-borderSubtle mb-6">
-                    <div className="flex items-start gap-4 mb-6">
-                        <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl">
-                            <FileSpreadsheet size={24} />
-                        </div>
+                {/* Doctor Titles Management */}
+                <div>
+                    <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm mb-4">
                         <div>
-                            <h3 className="text-lg font-bold text-gray-800 dark:text-white">Data Export</h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Download clinic records for reporting or external analysis.</p>
+                            <h3 className="text-lg font-bold text-gray-800 dark:text-white">{t('titles')}</h3>
+                            <p className="text-sm text-gray-500">{t('clinical_metadata_desc')}</p>
+                        </div>
+                        <button 
+                            onClick={() => { setTitleForm({ name: '' }); setShowTitleModal(true); }}
+                            className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-[var(--color-primary)]/20"
+                        >
+                            <Plus size={18}/> {t('add_title')}
+                        </button>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800 overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-50 dark:bg-slate-800/50 text-xs font-bold text-gray-500 uppercase border-b border-gray-100 dark:border-slate-800">
+                                <tr>
+                                    <th className="p-4">{t('title')}</th>
+                                    <th className="p-4 text-right">{t('actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                                {titles.map(title => (
+                                    <tr key={title.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50">
+                                        <td className="p-4 text-sm font-bold text-gray-800 dark:text-white">{title.name}</td>
+                                        <td className="p-4 text-right flex justify-end gap-2">
+                                            <button onClick={() => { setTitleForm(title); setShowTitleModal(true); }} className="p-2 text-gray-400 hover:text-[var(--color-primary)] rounded-lg"><Edit3 size={16}/></button>
+                                            <button onClick={() => deleteTitle(title.id)} className="p-2 text-gray-400 hover:text-red-500 rounded-lg"><Trash2 size={16}/></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* Specialties Management */}
+                <div>
+                    <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm mb-4">
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800 dark:text-white">{t('specialties')}</h3>
+                            <p className="text-sm text-gray-500">{t('specialties_desc')}</p>
+                        </div>
+                        <button 
+                            onClick={() => { setSpecForm({ name: '', category: 'Primary Care' }); setShowSpecModal(true); }}
+                            className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-[var(--color-primary)]/20"
+                        >
+                            <Plus size={18}/> {t('add_specialty')}
+                        </button>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800 overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-50 dark:bg-slate-800/50 text-xs font-bold text-gray-500 uppercase border-b border-gray-100 dark:border-slate-800">
+                                <tr>
+                                    <th className="p-4">{t('specialty')}</th>
+                                    <th className="p-4">{t('category')}</th>
+                                    <th className="p-4 text-right">{t('actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                                {specialties.map(spec => (
+                                    <tr key={spec.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50">
+                                        <td className="p-4 text-sm font-bold text-gray-800 dark:text-white">{spec.name}</td>
+                                        <td className="p-4 text-sm text-gray-600 dark:text-gray-400"><span className="bg-gray-100 dark:bg-slate-700 px-2 py-1 rounded text-xs">{spec.category}</span></td>
+                                        <td className="p-4 text-right flex justify-end gap-2">
+                                            <button onClick={() => { setSpecForm(spec); setShowSpecModal(true); }} className="p-2 text-gray-400 hover:text-[var(--color-primary)] rounded-lg"><Edit3 size={16}/></button>
+                                            <button onClick={() => deleteSpec(spec.id)} className="p-2 text-gray-400 hover:text-red-500 rounded-lg"><Trash2 size={16}/></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* DATA TAB */}
+        {activeTab === 'data' && (
+            <div className="animate-fade-in-up space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800">
+                        <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white flex items-center gap-2"><Database size={20}/> {t('backup_restore')}</h3>
+                        <p className="text-sm text-gray-500 mb-6">{t('backup_desc')}</p>
+                        
+                        <div className="flex flex-col gap-3">
+                            <button onClick={() => dbService.exportBackup()} className="w-full py-3 bg-[var(--color-primary)] hover:opacity-90 text-white rounded-xl font-bold flex items-center justify-center gap-2">
+                                <Save size={18} /> {t('export_backup')}
+                            </button>
+                            <label className="w-full py-3 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 rounded-xl font-bold flex items-center justify-center gap-2 cursor-pointer border border-gray-200 dark:border-slate-700">
+                                <Upload size={18} /> {t('restore_file')}
+                                <input type="file" className="hidden" accept=".sqlite,.db,.enc" onChange={(e) => { if(e.target.files?.[0]) dbService.importBackup(e.target.files[0]); }} />
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-red-200 dark:border-red-900/30">
+                        <h3 className="text-lg font-bold mb-4 text-red-600 dark:text-red-400 flex items-center gap-2"><Trash2 size={20}/> {t('danger_zone')}</h3>
+                        <p className="text-sm text-gray-500 mb-6">Irreversible actions. Please proceed with caution.</p>
+                        <button onClick={() => { if(confirm("Are you sure? This will wipe all data.")) dbService.factoryReset(); }} className="w-full py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl font-bold border border-red-100 dark:border-red-900 hover:bg-red-100 dark:hover:bg-red-900/30">
+                            {t('factory_reset')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* SHORTCUTS TAB */}
+        {activeTab === 'shortcuts' && (
+            <div className="animate-fade-in-up space-y-6">
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800">
+                    <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white flex items-center gap-2"><Keyboard size={20}/> {t('shortcuts')}</h3>
+                    <div className="space-y-3">
+                        {shortcuts.map(sc => (
+                            <div key={sc.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-gray-100 dark:border-slate-700">
+                                <div>
+                                    <p className="font-bold text-gray-800 dark:text-white">{sc.label}</p>
+                                    <p className="text-xs text-gray-500">{sc.description}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    {sc.keys.map((k, i) => (
+                                        <kbd key={i} className="px-2 py-1 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg font-mono text-xs font-bold text-gray-600 dark:text-gray-300 shadow-sm min-w-[24px] text-center">
+                                            {k}
+                                        </kbd>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* SYNC TAB */}
+        {activeTab === 'sync' && (
+            <div className="animate-fade-in-up space-y-6">
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800">
+                    <div className="flex justify-between items-start mb-6">
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2"><Wifi size={20} className="text-emerald-500"/> {t('network_sync')}</h3>
+                            <p className="text-sm text-gray-500 mt-1">{t('sync_desc')}</p>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-bold border border-emerald-100 dark:border-emerald-800">
+                            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div> Discovery Active
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="md:col-span-3">
-                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Export Scope</label>
-                            <div className="flex flex-wrap gap-2">
-                                {['all', 'patients', 'appointments', 'doctors', 'inventory'].map(scope => (
-                                    <button 
-                                        key={scope}
-                                        onClick={() => setExportScope(scope)}
-                                        className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition-all border ${exportScope === scope ? 'bg-gray-900 dark:bg-slate-700 text-white border-transparent' : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-slate-700 hover:border-gray-300'}`}
-                                    >
-                                        {scope}
-                                    </button>
-                                ))}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 className="text-xs font-bold text-gray-400 uppercase mb-3">{t('available_peers')}</h4>
+                            <div className="space-y-3">
+                                {peers.length === 0 ? (
+                                    <div className="p-4 border border-dashed rounded-xl text-center text-gray-400 text-sm">{t('scanning')}</div>
+                                ) : (
+                                    peers.map(peer => (
+                                        <div key={peer} className="flex justify-between items-center p-4 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-white dark:bg-slate-700 rounded-lg shadow-sm"><Server size={18} className="text-blue-500"/></div>
+                                                <span className="font-bold text-gray-700 dark:text-gray-200 text-sm">{peer}</span>
+                                            </div>
+                                            <button 
+                                                onClick={() => runSync(peer)}
+                                                disabled={isSyncing}
+                                                className="px-3 py-1.5 bg-gray-900 dark:bg-slate-600 text-white rounded-lg text-xs font-bold hover:opacity-90 disabled:opacity-50"
+                                            >
+                                                {isSyncing ? t('syncing') : t('sync_now')}
+                                            </button>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
-
-                        <button onClick={() => exportData('excel')} className="flex flex-col items-center justify-center gap-3 p-4 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/10 dark:hover:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl transition-all group">
-                            <FileSpreadsheet size={32} className="text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
-                            <span className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Excel Report</span>
-                        </button>
-
-                        <button onClick={() => exportData('csv')} className="flex flex-col items-center justify-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/10 dark:hover:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-xl transition-all group">
-                            <FileType size={32} className="text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform" />
-                            <span className="text-sm font-bold text-blue-800 dark:text-blue-300">CSV Data</span>
-                        </button>
-
-                        <button onClick={() => exportData('pdf')} className="flex flex-col items-center justify-center gap-3 p-4 bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/10 dark:hover:bg-rose-900/20 border border-rose-100 dark:border-rose-900/30 rounded-xl transition-all group">
-                            <FileText size={32} className="text-rose-600 dark:text-rose-400 group-hover:scale-110 transition-transform" />
-                            <span className="text-sm font-bold text-rose-800 dark:text-rose-300">PDF Document</span>
-                        </button>
+                        <div className="bg-black/90 rounded-xl p-4 text-xs font-mono text-green-400 h-64 overflow-y-auto">
+                            <p className="opacity-50 mb-2">// Sync Log Output</p>
+                            {syncLog.map((log, i) => <div key={i} className="mb-1">{`> ${log}`}</div>)}
+                        </div>
                     </div>
-                </div>
-
-                {/* ... Backup/Restore/Export UI ... */}
-                <div className="bg-surface p-6 rounded-2xl shadow-sm border border-borderSubtle">
-                     <div className="flex items-start gap-4 mb-6"><div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl"><Database size={24} /></div><div><h3 className="text-lg font-bold text-gray-800 dark:text-white">Database Operations</h3></div></div>
-                     <div className="space-y-4">
-                         <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl border border-gray-100 dark:border-slate-700"><div><p className="font-bold text-gray-800 dark:text-gray-200">Backup Database</p></div><button onClick={() => dbService.exportBackup()} className="px-4 py-2 border rounded-lg text-sm font-bold flex items-center gap-2 transition-all"><Save size={16} /> Download Backup</button></div>
-                         <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl border border-gray-100 dark:border-slate-700"><div><p className="font-bold text-gray-800 dark:text-gray-200">Restore Database</p></div><label className="px-4 py-2 border rounded-lg text-sm font-bold flex items-center gap-2 cursor-pointer transition-all"><Upload size={16} /> Upload Backup<input type="file" accept=".sqlite" className="hidden" onChange={handleImport} /></label></div>
-                         <div className="flex justify-between items-center p-4 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/20"><div><p className="font-bold text-red-700 dark:text-red-400">Factory Reset</p></div><button onClick={() => { if(confirm("Are you sure?")) dbService.factoryReset() }} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold flex items-center gap-2"><Trash2 size={16} /> Reset</button></div>
-                     </div>
                 </div>
             </div>
         )}
 
-        {/* ... Modal ... */}
-        {showUserModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in-up">
-                    <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50 dark:bg-slate-700/50">
-                        <h3 className="font-bold text-lg text-gray-800 dark:text-white flex items-center gap-2"><User size={20} className="text-[var(--color-primary)]" /> {userForm.id ? 'Edit User' : 'Create New User'}</h3>
-                        <button onClick={() => setShowUserModal(false)} className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500"><X size={20} /></button>
+        {/* Preview Mode Sticky Footer */}
+        {(isThemeDirty || isLangDirty) && (
+            createPortal(
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in-up w-[90%] max-w-lg">
+                    <div className="bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center justify-between gap-6 border border-slate-700">
+                        <div>
+                            <p className="font-bold text-sm">{t('unsaved_changes')}</p>
+                            <p className="text-xs text-slate-400">{t('preview_mode_active')}</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={handleRevertChanges} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors">
+                                <RotateCcw size={14}/> {t('revert')}
+                            </button>
+                            <button onClick={handleApplyChanges} className="px-4 py-2 bg-[var(--color-primary)] hover:opacity-90 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg shadow-[var(--color-primary)]/20 transition-all">
+                                <CheckCircle size={14}/> {t('apply_changes')}
+                            </button>
+                        </div>
                     </div>
-                    <div className="p-6 space-y-4">
-                         <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Full Name</label><input className="w-full border p-3 rounded-xl bg-gray-50 dark:bg-slate-700 dark:text-white" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} /></div>
-                         <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Email</label><input className="w-full border p-3 rounded-xl bg-gray-50 dark:bg-slate-700 dark:text-white" type="email" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} /></div>
-                         <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Password</label><input className="w-full border p-3 rounded-xl bg-gray-50 dark:bg-slate-700 dark:text-white" type="password" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} /></div>
-                         <div className="grid grid-cols-2 gap-4">
-                             <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Role</label><select className="w-full border p-3 rounded-xl bg-gray-50 dark:bg-slate-700 dark:text-white" value={userForm.role} onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}>{Object.values(UserRole).map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-                             {userForm.role === UserRole.DOCTOR && (<div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Link Profile</label><select className="w-full border p-3 rounded-xl bg-gray-50 dark:bg-slate-700 dark:text-white" value={userForm.relatedId} onChange={e => setUserForm({...userForm, relatedId: Number(e.target.value)})}>{doctors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>)}
-                         </div>
+                </div>,
+                document.body
+            )
+        )}
+
+        {/* User Modal */}
+        {showUserModal && createPortal(
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                <div className="bg-white dark:bg-slate-900 w-full max-w-md p-6 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-800 animate-fade-in-up">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-white">{userForm.id ? t('edit_user') : t('add_user')}</h3>
+                        <button onClick={() => setShowUserModal(false)}><X size={20} className="text-gray-400"/></button>
                     </div>
-                    <div className="p-6 border-t border-gray-100 dark:border-slate-700 flex justify-end gap-3">
-                        <button onClick={() => setShowUserModal(false)} className="px-4 py-2 text-gray-600 font-bold">Cancel</button>
-                        <button onClick={handleSaveUser} className="px-6 py-2 bg-gray-900 text-white rounded-lg font-bold shadow-lg flex items-center gap-2"><Check size={18} /> Save User</button>
-                    </div>
+                    <form onSubmit={handleUserSave} className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('full_name')}</label>
+                            <input required className="w-full border p-2.5 rounded-lg bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('email')}</label>
+                            <input required type="email" className="w-full border p-2.5 rounded-lg bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Password</label>
+                            <div className="relative">
+                                <Lock size={16} className="absolute left-3 top-3 text-gray-400 rtl:right-3 rtl:left-auto"/>
+                                <input 
+                                    type="password" 
+                                    className="w-full border p-2.5 pl-10 rtl:pr-10 rtl:pl-2.5 rounded-lg bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white" 
+                                    value={userForm.password} 
+                                    onChange={e => setUserForm({...userForm, password: e.target.value})} 
+                                    placeholder={userForm.id ? "Leave blank to keep current" : "Required"}
+                                    required={!userForm.id}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Role</label>
+                            <select className="w-full border p-2.5 rounded-lg bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white" value={userForm.role} onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}>
+                                {Object.values(UserRole).map(r => <option key={r} value={r}>{t(r as any)}</option>)}
+                            </select>
+                        </div>
+                        {userForm.role === UserRole.DOCTOR && (
+                            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-100 dark:border-blue-800">
+                                <label className="block text-xs font-bold text-blue-700 dark:text-blue-300 uppercase mb-1">{t('link_doctor_profile')}</label>
+                                <select 
+                                    className="w-full border border-blue-200 dark:border-blue-800 p-2.5 rounded-lg bg-white dark:bg-slate-900 dark:text-white" 
+                                    value={userForm.relatedId} 
+                                    onChange={e => setUserForm({...userForm, relatedId: Number(e.target.value)})}
+                                >
+                                    <option value={0}>-- Select Doctor --</option>
+                                    {doctors.map(d => <option key={d.id} value={d.id}>{d.name} ({d.specialty})</option>)}
+                                </select>
+                                <p className="text-[10px] text-blue-500 mt-1">{t('link_doctor_desc')}</p>
+                            </div>
+                        )}
+                        <div className="pt-4 flex justify-end gap-2">
+                            <button type="button" onClick={() => setShowUserModal(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg">{t('cancel')}</button>
+                            <button className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-lg font-bold shadow-lg">{t('save')}</button>
+                        </div>
+                    </form>
                 </div>
-            </div>
+            </div>,
+            document.body
+        )}
+
+        {/* Specialty Modal */}
+        {showSpecModal && createPortal(
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                <div className="bg-white dark:bg-slate-900 w-full max-w-sm p-6 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-800 animate-fade-in-up">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-white">{specForm.id ? t('edit') : t('add_specialty')}</h3>
+                        <button onClick={() => setShowSpecModal(false)}><X size={20} className="text-gray-400"/></button>
+                    </div>
+                    <form onSubmit={handleSpecSave} className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('specialty')}</label>
+                            <input required className="w-full border p-2.5 rounded-lg bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white" value={specForm.name} onChange={e => setSpecForm({...specForm, name: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('category')}</label>
+                            <select className="w-full border p-2.5 rounded-lg bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white" value={specForm.category} onChange={e => setSpecForm({...specForm, category: e.target.value})}>
+                                <option>Primary Care</option>
+                                <option>Internal Specialists</option>
+                                <option>Surgical</option>
+                                <option>Women's Health</option>
+                                <option>Head & Neck</option>
+                                <option>Diagnostic & Critical</option>
+                                <option>Other</option>
+                            </select>
+                        </div>
+                        <div className="pt-4 flex justify-end gap-2">
+                            <button type="button" onClick={() => setShowSpecModal(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg">{t('cancel')}</button>
+                            <button className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-lg font-bold shadow-lg">{t('save')}</button>
+                        </div>
+                    </form>
+                </div>
+            </div>,
+            document.body
+        )}
+
+        {/* Title Modal */}
+        {showTitleModal && createPortal(
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                <div className="bg-white dark:bg-slate-900 w-full max-w-sm p-6 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-800 animate-fade-in-up">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-white">{titleForm.id ? t('edit') : t('add_title')}</h3>
+                        <button onClick={() => setShowTitleModal(false)}><X size={20} className="text-gray-400"/></button>
+                    </div>
+                    <form onSubmit={handleTitleSave} className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('title')}</label>
+                            <input required className="w-full border p-2.5 rounded-lg bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white" value={titleForm.name} onChange={e => setTitleForm({...titleForm, name: e.target.value})} />
+                        </div>
+                        <div className="pt-4 flex justify-end gap-2">
+                            <button type="button" onClick={() => setShowTitleModal(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg">{t('cancel')}</button>
+                            <button className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-lg font-bold shadow-lg">{t('save')}</button>
+                        </div>
+                    </form>
+                </div>
+            </div>,
+            document.body
         )}
     </div>
   );

@@ -1,17 +1,24 @@
+
 import React, { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { dbService } from './services/db';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { LanguageProvider } from './contexts/LanguageContext';
+import { ShortcutProvider } from './contexts/ShortcutContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Appointments from './pages/Appointments';
 import Patients from './pages/Patients';
 import Doctors from './pages/Doctors';
+import Nurses from './pages/Nurses';
+import Services from './pages/Services';
+import Prescriptions from './pages/Prescriptions';
 import Finances from './pages/Finances';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
-import Pharmacy from './pages/Pharmacy';
 import Notifications from './pages/Notifications';
+import QueueDisplay from './pages/QueueDisplay';
 import { Loader2 } from 'lucide-react';
 import { UserRole } from './types';
 
@@ -35,54 +42,6 @@ const Initializer = ({ children }: { children?: React.ReactNode }) => {
     const init = async () => {
       try {
         await dbService.init();
-        
-        // Load settings safely
-        let settings: any[] = [];
-        try {
-            settings = dbService.query("SELECT * FROM settings");
-        } catch (e) {
-            console.warn("Could not load settings, using defaults", e);
-        }
-
-        const themeMode = settings.find((s: any) => s.key === 'theme_mode')?.value || 'light';
-        const activeDecoration = settings.find((s: any) => s.key === 'active_decoration')?.value || 'none';
-        
-        const root = document.documentElement;
-
-        // 1. Clean up old classes
-        root.classList.remove('theme-spring', 'theme-ramadan', 'theme-christmas', 'theme-halloween', 'theme-none');
-        root.classList.remove('dark');
-
-        // 2. Apply Dark Mode Class
-        if (themeMode === 'dark') {
-            root.classList.add('dark');
-        }
-
-        // 3. Apply Theme Class
-        if (activeDecoration !== 'none') {
-            // Named theme: Class handles all variables
-            root.classList.add(`theme-${activeDecoration}`);
-            
-            // Remove inline overrides to let CSS class variables take precedence
-            root.style.removeProperty('--color-primary');
-            root.style.removeProperty('--color-secondary');
-            root.style.removeProperty('--color-app-bg');
-            root.style.removeProperty('--color-surface');
-            root.style.removeProperty('--color-border');
-            root.style.removeProperty('--color-input-bg');
-        } else {
-            // Default theme: Use fallback class + allow manual overrides from DB
-            root.classList.add('theme-none');
-            
-            const primary = settings.find((s: any) => s.key === 'primary_color')?.value;
-            const secondary = settings.find((s: any) => s.key === 'secondary_color')?.value;
-            const inputBg = settings.find((s: any) => s.key === 'input_bg_color')?.value;
-
-            if (primary) root.style.setProperty('--color-primary', primary);
-            if (secondary) root.style.setProperty('--color-secondary', secondary);
-            if (inputBg) root.style.setProperty('--color-input-bg', inputBg);
-        }
-
         setReady(true);
       } catch (err) {
         console.error("Initialization Failed:", err);
@@ -108,50 +67,70 @@ const Initializer = ({ children }: { children?: React.ReactNode }) => {
 function App() {
   return (
     <Initializer>
-      <AuthProvider>
-        <HashRouter>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="appointments" element={<Appointments />} />
-              
-              <Route path="patients" element={
-                <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.NURSE]}>
-                  <Patients />
-                </ProtectedRoute>
-              } />
-              
-              <Route path="doctors" element={
-                <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
-                  <Doctors />
-                </ProtectedRoute>
-              } />
-              
-              <Route path="pharmacy" element={
-                <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DOCTOR, UserRole.NURSE]}>
-                  <Pharmacy />
-                </ProtectedRoute>
-              } />
-              
-              <Route path="messages" element={<Notifications />} />
-              
-              <Route path="finances" element={
-                <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.BILLING]}>
-                  <Finances />
-                </ProtectedRoute>
-              } />
-              
-              <Route path="settings" element={
-                <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
-                  <Settings />
-                </ProtectedRoute>
-              } />
-            </Route>
-          </Routes>
-        </HashRouter>
-      </AuthProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <ThemeProvider>
+            <HashRouter>
+              <ShortcutProvider> 
+                <Routes>
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/queue-tv" element={<QueueDisplay />} />
+                  
+                  <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                    <Route index element={<Navigate to="/dashboard" replace />} />
+                    <Route path="dashboard" element={<Dashboard />} />
+                    <Route path="appointments" element={<Appointments />} />
+                    
+                    <Route path="patients" element={
+                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.NURSE]}>
+                        <Patients />
+                      </ProtectedRoute>
+                    } />
+                    
+                    <Route path="doctors" element={
+                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
+                        <Doctors />
+                      </ProtectedRoute>
+                    } />
+
+                    <Route path="nurses" element={
+                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
+                        <Nurses />
+                      </ProtectedRoute>
+                    } />
+
+                    <Route path="services" element={
+                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
+                        <Services />
+                      </ProtectedRoute>
+                    } />
+
+                    <Route path="prescriptions" element={
+                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DOCTOR, UserRole.NURSE]}>
+                        <Prescriptions />
+                      </ProtectedRoute>
+                    } />
+                    
+                    <Route path="messages" element={<Notifications />} />
+                    
+                    <Route path="finances" element={
+                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.BILLING]}>
+                        <Finances />
+                      </ProtectedRoute>
+                    } />
+                    
+                    <Route path="settings" element={
+                      <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+                        <Settings />
+                      </ProtectedRoute>
+                    } />
+                  </Route>
+                </Routes>
+              </ShortcutProvider>
+            </HashRouter>
+          </ThemeProvider>
+        </AuthProvider>
+      </LanguageProvider>
     </Initializer>
   );
 }

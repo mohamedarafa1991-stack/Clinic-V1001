@@ -18,7 +18,8 @@ export enum AppointmentStatus {
 export enum PaymentStatus {
   PENDING = 'Pending',
   PARTIAL = 'Partial',
-  PAID = 'Paid'
+  PAID = 'Paid',
+  FREE = 'Free'
 }
 
 export interface User {
@@ -26,19 +27,43 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  relatedId?: number; // Links to Doctor ID
+  relatedId?: number; // Links to Doctor/Nurse ID
+}
+
+export interface Specialty {
+  id: number;
+  name: string;
+  category: string;
+}
+
+export interface DoctorTitle {
+  id: number;
+  name: string;
 }
 
 export interface Doctor {
   id: number;
   name: string;
+  title?: string;
+  licenseId?: string;
   specialty: string;
   fee: number;
-  schedule: string; // JSON string of WorkSchedule
+  commissionRate?: number; // Percentage 0-100
+  schedule: string;
   bio: string;
   photo: string;
   phone?: string;
   email?: string;
+  status?: 'Active' | 'On Leave' | 'Inactive';
+}
+
+export interface Nurse {
+  id: number;
+  name: string;
+  phone: string;
+  email: string;
+  commissionRate?: number; // Percentage 0-100
+  status: 'Active' | 'Inactive';
 }
 
 export interface WorkSchedule {
@@ -53,8 +78,8 @@ export interface DoctorNote {
   id: number;
   doctorId: number;
   text: string;
-  type: 'Permanent' | 'Temporary';
-  priority: 'Normal' | 'Important';
+  type: 'Permanent' | 'Temporary' | 'Instruction';
+  priority: 'Normal' | 'Important' | 'Critical';
   expiryDate?: string;
   visibility: 'All' | 'Admin' | 'Medical';
   authorName: string;
@@ -71,24 +96,12 @@ export interface Patient {
   emergency_contact?: string;
   blood_group?: string;
   allergies?: string;
-  chronic_conditions?: string; // New Field
+  chronic_conditions?: string;
   dob: string;
   gender: string;
-  history: string; // JSON string of VisitRecord[]
-  height?: number; // in cm
-  weight?: number; // in kg
-  // Removed Insurance fields from interface usage, though DB might still have columns
-}
-
-export interface VisitRecord {
-  date: string;
-  diagnosis: string;
-  treatment: string;
-  medications: string;
-  // New Vitals
-  bp?: string;
-  heartRate?: string;
-  temperature?: string;
+  history: string;
+  height?: number;
+  weight?: number;
 }
 
 export interface Appointment {
@@ -100,9 +113,37 @@ export interface Appointment {
   status: AppointmentStatus;
   type: string;
   totalFee: number;
+  discount: number;
   amountPaid: number;
   paymentStatus: PaymentStatus;
   queueNumber: number;
+  paymentNotes?: string;
+}
+
+export interface VisitType {
+  id: number;
+  name: string;
+  defaultFee: number;
+  isFollowUp: number;
+  followUpDays: number;
+}
+
+export interface Service {
+  id: number;
+  name: string;
+  category: 'Procedure' | 'Diagnostic' | 'Nursing' | 'Other';
+  basePrice: number;
+  isActive: number;
+  assignableTo: 'Doctor' | 'Nurse' | 'Both'; // Who can perform this?
+}
+
+export interface AppointmentService {
+  id: number;
+  appointmentId: number;
+  serviceId: number;
+  priceSnapshot: number;
+  performedBy?: number; // User ID of performer
+  performerRole?: string; // 'Doctor' or 'Nurse'
 }
 
 export interface Notification {
@@ -113,34 +154,12 @@ export interface Notification {
   date: string;
 }
 
-export interface ClinicSettings {
-  name: string;
-  primaryColor: string;
-  secondaryColor: string;
-  address: string;
-}
-
-export interface Medicine {
-  id: number;
-  name: string; // Trade Name
-  generic: string; // Active Ingredient
-  category?: string; // Therapeutic Category
-  form: string; // Tablet, Syrup, Injection, etc.
-  concentration: string; // 500mg, 1g, etc.
-  manufacturer: string;
-  // Removed Price
-  
-  // Legacy Inventory Fields (Optional now)
-  stock?: number;
-  expiry?: string;
-}
-
 export interface Prescription {
   id: number;
   patientId: number;
   doctorId: number;
   date: string;
-  items: string; // JSON string of PrescriptionItem[]
+  items: string;
   notes: string;
 }
 

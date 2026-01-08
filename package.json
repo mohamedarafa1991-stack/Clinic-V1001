@@ -17,7 +17,12 @@
     "lucide-react": "^0.562.0",
     "jspdf-autotable": "^5.0.2",
     "date-fns": "^4.1.0",
-    "xlsx": "0.18.5"
+    "xlsx": "0.18.5",
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7",
+    "electron": "^39.2.7",
+    "buffer": "^6.0.3",
+    "crypto": "^1.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { dbService } from '../services/db';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -6,8 +7,7 @@ import {
 } from 'recharts';
 import { 
   DollarSign, TrendingUp, CreditCard, AlertCircle, Users, 
-  Download, Wallet, ArrowUpRight,
-  Briefcase
+  Download, Wallet, ArrowUpRight, Briefcase, BarChart2
 } from 'lucide-react';
 import { parseISO, isSameMonth, format, startOfMonth, endOfMonth } from 'date-fns';
 import { jsPDF } from 'jspdf';
@@ -17,23 +17,41 @@ const Finances = () => {
   const [timeRange, setTimeRange] = useState<'all' | 'month' | 'custom'>('all');
   const [customStart, setCustomStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [customEnd, setCustomEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [chartMetric, setChartMetric] = useState<'revenue' | 'patients'>('revenue');
+  const [primaryColor, setPrimaryColor] = useState('#0d9488');
+
+  // Load Theme Color
+  useEffect(() => {
+      const updateColor = () => {
+          const style = getComputedStyle(document.body);
+          const color = style.getPropertyValue('--color-primary').trim();
+          if(color) setPrimaryColor(color);
+      };
+      updateColor();
+      window.addEventListener('medicore-theme-change', updateColor);
+      return () => window.removeEventListener('medicore-theme-change', updateColor);
+  }, []);
 
   // Load Data
   const appointments = dbService.query("SELECT * FROM appointments");
   const doctors = dbService.query("SELECT * FROM doctors");
+  const nurses = dbService.query("SELECT * FROM nurses");
+  const appServices = dbService.query("SELECT * FROM appointment_services");
   
   // --- Data Processing ---
   const filteredAppointments = useMemo(() => {
-    if (timeRange === 'all') return appointments;
+    let filtered = appointments;
     if (timeRange === 'month') {
         const now = new Date();
-        return appointments.filter((a: any) => isSameMonth(parseISO(a.date), now));
+        filtered = appointments.filter((a: any) => isSameMonth(parseISO(a.date), now));
     }
     if (timeRange === 'custom') {
-        return appointments.filter((a: any) => a.date >= customStart && a.date <= customEnd);
+        filtered = appointments.filter((a: any) => a.date >= customStart && a.date <= customEnd);
     }
-    return appointments;
+    return filtered;
   }, [appointments, timeRange, customStart, customEnd]);
+
+  const filteredAppIds = useMemo(() => new Set(filteredAppointments.map((a: any) => a.id)), [filteredAppointments]);
 
   // 1. KPI Calculations
   const kpi = useMemo(() => {
@@ -43,69 +61,130 @@ const Finances = () => {
     let paidCount = 0;
 
     filteredAppointments.forEach((a: any) => {
-      totalRevenue += a.amountPaid || 0;
-      totalBilled += a.totalFee || 0;
-      if (a.paymentStatus === 'Paid' || a.paymentStatus === 'Partial') paidCount++;
+      const collected = a.amountPaid || 0;
+      const billed = (a.totalFee || 0) - (a.discount || 0); // Net Billed
+      
+      totalRevenue += collected;
+      totalBilled += billed;
+      
+      if (collected > 0) paidCount++;
     });
 
-    totalOutstanding = totalBilled - totalRevenue;
+    totalOutstanding = Math.max(0, totalBilled - totalRevenue);
     const collectionRate = totalBilled > 0 ? (totalRevenue / totalBilled) * 100 : 0;
     const avgTransaction = paidCount > 0 ? totalRevenue / paidCount : 0;
 
     return { totalRevenue, totalBilled, totalOutstanding, collectionRate, avgTransaction, count: filteredAppointments.length };
   }, [filteredAppointments]);
 
-  // 2. Trend Data (Daily Revenue)
+  // 2. Trend Data (Daily Revenue & Patients)
   const trendData = useMemo(() => {
-    const map: Record<string, number> = {};
+    const map: Record<string, { revenue: number, patients: number }> = {};
     filteredAppointments.forEach((a: any) => {
         const d = a.date; 
-        map[d] = (map[d] || 0) + a.amountPaid;
+        if (!map[d]) map[d] = { revenue: 0, patients: 0 };
+        map[d].revenue += (a.amountPaid || 0);
+        map[d].patients += 1;
     });
-    return Object.keys(map).sort().map(date => ({ date, revenue: map[date] }));
+    return Object.keys(map).sort().map(date => ({ 
+        date, 
+        revenue: map[date].revenue,
+        patients: map[date].patients 
+    }));
   }, [filteredAppointments]);
 
-  // 3. Revenue by Specialty
-  const specialtyData = useMemo(() => {
-    const map: Record<string, number> = {};
-    const docMap: Record<number, any> = {};
-    doctors.forEach((d: any) => docMap[d.id] = d);
-
-    filteredAppointments.forEach((a: any) => {
-        const doc = docMap[a.doctorId];
-        const spec = doc?.specialty || 'General';
-        map[spec] = (map[spec] || 0) + a.amountPaid;
-    });
-
-    return Object.keys(map).map(name => ({ name, value: map[name] }));
-  }, [filteredAppointments, doctors]);
-
-  // 4. Doctor Performance Table Data
-  const doctorStats = useMemo(() => {
-    const stats: Record<number, any> = {};
+  // 3. Provider Performance & Commission Logic
+  const providerStats = useMemo(() => {
+    const stats: Record<string, any> = {};
+    
+    // Init Doctors
     doctors.forEach((d: any) => {
-        stats[d.id] = { 
+        stats[`D-${d.id}`] = { 
             id: d.id, 
+            type: 'Doctor',
             name: d.name, 
             specialty: d.specialty,
+            commissionRate: d.commissionRate || 0,
             patients: 0,
-            billed: 0,
-            collected: 0,
-            outstanding: 0 
+            revenue: 0, // Attributed Revenue
+            commission: 0 
         };
     });
 
+    // Init Nurses
+    nurses.forEach((n: any) => {
+        stats[`N-${n.id}`] = { 
+            id: n.id, 
+            type: 'Nurse',
+            name: n.name, 
+            specialty: 'Nursing',
+            commissionRate: n.commissionRate || 0,
+            patients: 0,
+            revenue: 0,
+            commission: 0 
+        };
+    });
+
+    // We must iterate appointments to handle base fees (Consultation) AND services
     filteredAppointments.forEach((a: any) => {
-        if (stats[a.doctorId]) {
-            stats[a.doctorId].patients++;
-            stats[a.doctorId].billed += a.totalFee;
-            stats[a.doctorId].collected += a.amountPaid;
-            stats[a.doctorId].outstanding += (a.totalFee - a.amountPaid);
+        // A. Base Visit Revenue -> Assigned to Main Doctor
+        const docKey = `D-${a.doctorId}`;
+        if (stats[docKey]) {
+            stats[docKey].patients++;
+            // Calculate base fee portion: Total - Services. 
+            // Simplified: We check services linked to this appointment
+            const servicesForApp = appServices.filter((s: any) => s.appointmentId === a.id);
+            const servicesTotal = servicesForApp.reduce((sum: number, s: any) => sum + (s.priceSnapshot || 0), 0);
+            
+            // The "Visit Fee" is roughly Total - Services. 
+            // However, discounts apply to the whole.
+            // Commission Logic: We apply collection ratio to attribute realized revenue.
+            
+            const collectionRatio = a.totalFee > 0 ? (a.amountPaid / a.totalFee) : 0;
+            
+            // Base Fee Revenue (Doctor)
+            const baseFeeBilled = Math.max(0, a.totalFee - servicesTotal); 
+            // We assume discount applies proportionally or to base fee first? 
+            // Let's apply collection ratio to everything for fairness.
+            
+            const baseFeeCollected = baseFeeBilled * collectionRatio;
+            
+            stats[docKey].revenue += baseFeeCollected;
+            stats[docKey].commission += (baseFeeCollected * (stats[docKey].commissionRate / 100));
+
+            // B. Service Revenue -> Assigned to Performer
+            servicesForApp.forEach((s: any) => {
+                const serviceCollected = (s.priceSnapshot || 0) * collectionRatio;
+                let performerKey = '';
+                
+                if (s.performerRole === 'Nurse' && s.performedBy) performerKey = `N-${s.performedBy}`;
+                else if (s.performerRole === 'Doctor' && s.performedBy) performerKey = `D-${s.performedBy}`;
+                else performerKey = docKey; // Fallback to main doctor
+
+                if (stats[performerKey]) {
+                    stats[performerKey].revenue += serviceCollected;
+                    stats[performerKey].commission += (serviceCollected * (stats[performerKey].commissionRate / 100));
+                    // Note: Patient count logic for nurses is tricky, we can count distinct appointments they served
+                }
+            });
         }
     });
 
-    return Object.values(stats).sort((a: any, b: any) => b.collected - a.collected);
-  }, [filteredAppointments, doctors]);
+    return Object.values(stats).sort((a: any, b: any) => b.revenue - a.revenue);
+  }, [filteredAppointments, doctors, nurses, appServices]);
+
+  // 4. Specialty Data (Derived from Provider Stats for visual consistency)
+  const specialtyData = useMemo(() => {
+      const map: Record<string, number> = {};
+      providerStats.forEach((p: any) => {
+          if (p.type === 'Doctor') {
+              map[p.specialty] = (map[p.specialty] || 0) + p.revenue;
+          } else {
+              map['Nursing'] = (map['Nursing'] || 0) + p.revenue;
+          }
+      });
+      return Object.keys(map).map(name => ({ name, value: map[name] }));
+  }, [providerStats]);
 
   // --- Export ---
   const exportReport = () => {
@@ -113,22 +192,22 @@ const Finances = () => {
     let rangeText = timeRange === 'all' ? 'All Time' : 'Current Month';
     if (timeRange === 'custom') rangeText = `${customStart} to ${customEnd}`;
 
-    doc.text(`Financial Report (${rangeText})`, 14, 20);
+    doc.text(`Financial & Commission Report (${rangeText})`, 14, 20);
     
     autoTable(doc, {
         startY: 30,
-        head: [['Doctor', 'Specialty', 'Patients', 'Billed', 'Collected', 'Outstanding']],
-        body: doctorStats.map((d: any) => [
-            d.name, d.specialty, d.patients, 
-            d.billed.toFixed(2), d.collected.toFixed(2), d.outstanding.toFixed(2)
+        head: [['Provider', 'Role', 'Revenue (Collected)', 'Comm %', 'Commission']],
+        body: providerStats.map((d: any) => [
+            d.name, d.type, 
+            d.revenue.toFixed(2), d.commissionRate + '%', d.commission.toFixed(2)
         ]),
         theme: 'grid'
     });
     
-    doc.save('finance_report.pdf');
+    doc.save('finance_commission_report.pdf');
   };
 
-  const COLORS = ['#0d9488', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899'];
+  const COLORS = [primaryColor, '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899'];
 
   return (
     <div className="space-y-6 pb-12">
@@ -252,27 +331,51 @@ const Finances = () => {
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Trend Chart */}
-            <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm transition-colors">
-                <h3 className="font-bold text-gray-800 dark:text-white mb-6 flex items-center gap-2">
-                    <TrendingUp size={18} className="text-[var(--color-primary)]"/> Income Trend
-                </h3>
-                <div className="h-72 w-full">
+            <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm transition-colors flex flex-col">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                        <TrendingUp size={18} className="text-[var(--color-primary)]"/> Performance Trends
+                    </h3>
+                    <div className="flex gap-2 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg">
+                        <button 
+                            onClick={() => setChartMetric('revenue')} 
+                            className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartMetric === 'revenue' ? 'bg-white dark:bg-slate-700 shadow text-[var(--color-primary)]' : 'text-gray-500'}`}
+                        >
+                            Revenue
+                        </button>
+                        <button 
+                            onClick={() => setChartMetric('patients')} 
+                            className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartMetric === 'patients' ? 'bg-white dark:bg-slate-700 shadow text-[var(--color-primary)]' : 'text-gray-500'}`}
+                        >
+                            Volume
+                        </button>
+                    </div>
+                </div>
+                <div className="flex-1 w-full h-72">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={trendData}>
                             <defs>
-                                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3}/>
-                                    <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
+                                <linearGradient id="colorMetric" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={chartMetric === 'revenue' ? primaryColor : '#3b82f6'} stopOpacity={0.3}/>
+                                    <stop offset="95%" stopColor={chartMetric === 'revenue' ? primaryColor : '#3b82f6'} stopOpacity={0}/>
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94a3b8" strokeOpacity={0.2} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94a3b8" strokeOpacity={0.1} />
                             <XAxis dataKey="date" fontSize={10} axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} />
-                            <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => `EGP ${val}`} tick={{fill: '#94a3b8'}} />
+                            <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => chartMetric === 'revenue' ? `EGP ${val}` : val} tick={{fill: '#94a3b8'}} />
                             <Tooltip 
                                 contentStyle={{ backgroundColor: '#1e293b', border: 'none', color: '#fff', borderRadius: '8px' }}
-                                formatter={(val: number) => [`EGP ${val.toLocaleString()}`, 'Revenue']}
+                                formatter={(val: number) => [chartMetric === 'revenue' ? `EGP ${val.toLocaleString()}` : val, chartMetric === 'revenue' ? 'Revenue' : 'Patients']}
                             />
-                            <Area type="monotone" dataKey="revenue" stroke="var(--color-primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
+                            <Area 
+                                type="monotone" 
+                                dataKey={chartMetric} 
+                                stroke={chartMetric === 'revenue' ? primaryColor : '#3b82f6'} 
+                                strokeWidth={3} 
+                                fillOpacity={1} 
+                                fill="url(#colorMetric)" 
+                                animationDuration={1000} 
+                            />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
@@ -308,65 +411,52 @@ const Finances = () => {
             </div>
         </div>
 
-        {/* Detailed Doctor Performance Table */}
+        {/* Detailed Provider Performance Table */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
             <div className="p-6 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50/50 dark:bg-slate-800/50">
                 <div>
-                    <h3 className="font-bold text-gray-800 dark:text-white text-lg">Individual Doctor Performance</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Breakdown of billing, collections, and debt per specialist.</p>
+                    <h3 className="font-bold text-gray-800 dark:text-white text-lg">Provider Commission Ledger</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Revenue attribution and commission calculations based on realized collection.</p>
                 </div>
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-left">
                     <thead className="bg-gray-50 dark:bg-slate-800/50 border-b border-gray-100 dark:border-slate-800 text-xs uppercase text-gray-500 dark:text-gray-400">
                         <tr>
-                            <th className="px-6 py-4 font-bold">Specialist</th>
-                            <th className="px-6 py-4 font-bold">Visits</th>
-                            <th className="px-6 py-4 font-bold text-right">Total Billed</th>
-                            <th className="px-6 py-4 font-bold text-right">Collected</th>
-                            <th className="px-6 py-4 font-bold text-right">Outstanding</th>
-                            <th className="px-6 py-4 font-bold text-center">Collection %</th>
+                            <th className="px-6 py-4 font-bold">Provider</th>
+                            <th className="px-6 py-4 font-bold">Role</th>
+                            <th className="px-6 py-4 font-bold">Patients Served</th>
+                            <th className="px-6 py-4 font-bold text-right">Attributed Revenue</th>
+                            <th className="px-6 py-4 font-bold text-right">Comm %</th>
+                            <th className="px-6 py-4 font-bold text-right">Commission</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                        {doctorStats.map((doc: any) => {
-                            const rate = doc.billed > 0 ? (doc.collected / doc.billed) * 100 : 0;
-                            return (
-                                <tr key={doc.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-col">
-                                            <span className="font-bold text-gray-800 dark:text-white text-sm">{doc.name}</span>
-                                            <span className="text-xs text-gray-500 dark:text-gray-400">{doc.specialty}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded-md text-xs font-bold border border-blue-100 dark:border-blue-900/40">
-                                            {doc.patients}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-600 dark:text-gray-300">
-                                        EGP {doc.billed.toLocaleString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-right text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                                        EGP {doc.collected.toLocaleString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-right text-sm font-medium text-rose-500 dark:text-rose-400">
-                                        EGP {doc.outstanding.toLocaleString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-center">
-                                        <div className="flex items-center justify-center gap-2">
-                                            <div className="w-16 h-1.5 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                                                <div 
-                                                    className={`h-full rounded-full ${rate >= 90 ? 'bg-emerald-500' : rate >= 50 ? 'bg-orange-400' : 'bg-red-500'}`} 
-                                                    style={{ width: `${rate}%` }}
-                                                ></div>
-                                            </div>
-                                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{rate.toFixed(0)}%</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
+                        {providerStats.map((p: any) => (
+                            <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
+                                <td className="px-6 py-4">
+                                    <p className="font-bold text-gray-900 dark:text-white text-sm">{p.name}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{p.specialty}</p>
+                                </td>
+                                <td className="px-6 py-4">
+                                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${p.type === 'Doctor' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>
+                                        {p.type}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-4 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    {p.patients}
+                                </td>
+                                <td className="px-6 py-4 text-right text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    EGP {p.revenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                </td>
+                                <td className="px-6 py-4 text-right text-sm font-bold text-gray-500">
+                                    {p.commissionRate}%
+                                </td>
+                                <td className="px-6 py-4 text-right text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                    EGP {p.commission.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                </td>
+                            </tr>
+                        ))}
                     </tbody>
                 </table>
             </div>

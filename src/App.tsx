@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { dbService } from './services/db';
@@ -10,7 +11,6 @@ import Doctors from './pages/Doctors';
 import Finances from './pages/Finances';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
-import Pharmacy from './pages/Pharmacy';
 import Notifications from './pages/Notifications';
 import { Loader2 } from 'lucide-react';
 import { UserRole } from './types';
@@ -126,12 +126,6 @@ function App() {
               <Route path="doctors" element={
                 <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
                   <Doctors />
-                </ProtectedRoute>
-              } />
-              
-              <Route path="pharmacy" element={
-                <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DOCTOR, UserRole.NURSE]}>
-                  <Pharmacy />
                 </ProtectedRoute>
               } />
               
