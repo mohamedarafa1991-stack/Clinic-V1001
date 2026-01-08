@@ -1,4 +1,5 @@
 
+
 export enum UserRole {
   ADMIN = 'admin',
   DOCTOR = 'doctor',
@@ -87,6 +88,19 @@ export interface DoctorNote {
   createdAt: string;
 }
 
+export interface NurseNote {
+  id: number;
+  nurseId: number;
+  text: string;
+  type: 'Permanent' | 'Temporary' | 'Instruction';
+  priority: 'Normal' | 'Important' | 'Critical';
+  expiryDate?: string;
+  visibility: 'All' | 'Admin' | 'Medical';
+  authorName: string;
+  authorRole: string;
+  createdAt: string;
+}
+
 export interface Patient {
   id: number;
   name: string;
@@ -161,6 +175,7 @@ export interface Prescription {
   date: string;
   items: string;
   notes: string;
+  diagnosis?: string;
 }
 
 export interface PrescriptionItem {

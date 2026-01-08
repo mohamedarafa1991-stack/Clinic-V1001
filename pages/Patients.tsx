@@ -7,7 +7,7 @@ import {
   User, Plus, Search, FileText, ChevronDown, ChevronUp, 
   Pill, Printer, Save, X, Edit3, Trash2, Activity, 
   Calendar, FilePlus, AlertCircle, Phone, Mail, MapPin, Heart, AlertOctagon,
-  Scale, Thermometer, HeartPulse, Shield, CheckCircle2, Calculator, Upload, Eye, Image as ImageIcon, BookTemplate, ZoomIn, ZoomOut, RotateCw, TrendingUp
+  Scale, Thermometer, HeartPulse, Shield, CheckCircle2, Calculator, Upload, Eye, Image as ImageIcon, BookTemplate, ZoomIn, ZoomOut, RotateCw, TrendingUp, Filter
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -76,6 +76,9 @@ const Patients = () => {
   // Data State
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterGender, setFilterGender] = useState('');
+  const [filterBloodGroup, setFilterBloodGroup] = useState('');
+  
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'timeline' | 'appointments' | 'rx' | 'docs' | 'trends'>('info');
   const [patientPrescriptions, setPatientPrescriptions] = useState<any[]>([]);
@@ -109,13 +112,39 @@ const Patients = () => {
   useEffect(() => { 
       loadPatients(); 
       setDoctors(dbService.query("SELECT * FROM doctors"));
-  }, [searchTerm]);
+  }, [searchTerm, filterGender, filterBloodGroup]);
 
   const loadPatients = () => {
-    const q = searchTerm 
-        ? `SELECT * FROM patients WHERE name LIKE '%${searchTerm}%' OR phone LIKE '%${searchTerm}%' OR email LIKE '%${searchTerm}%'`
-        : "SELECT * FROM patients ORDER BY name ASC";
+    let q = "SELECT * FROM patients WHERE 1=1";
+    
+    if (searchTerm) {
+        const term = searchTerm.trim();
+        const isNum = /^\d+$/.test(term);
+        if (isNum) {
+            // Numeric: Search by ID (Exact) OR Phone (Partial)
+            q += ` AND (id = ${term} OR phone LIKE '%${term}%')`;
+        } else {
+            // Text: Search Name, Email, Address
+            q += ` AND (name LIKE '%${term}%' OR email LIKE '%${term}%' OR address LIKE '%${term}%')`;
+        }
+    }
+
+    if (filterGender) {
+        q += ` AND gender = '${filterGender}'`;
+    }
+
+    if (filterBloodGroup) {
+        q += ` AND blood_group = '${filterBloodGroup}'`;
+    }
+
+    q += " ORDER BY name ASC";
     setPatients(dbService.query(q));
+  };
+
+  const clearFilters = () => {
+      setSearchTerm('');
+      setFilterGender('');
+      setFilterBloodGroup('');
   };
 
   const loadSubData = (pid: number) => {
@@ -284,7 +313,56 @@ const Patients = () => {
             <button onClick={() => { resetForm(); setShowPatientModal(true); }} className="bg-[var(--color-primary)] text-white px-5 py-2.5 rounded-xl flex items-center gap-2 hover:opacity-90 shadow-lg"><Plus size={18} /> {t('new_patient')}</button>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800 mb-6 flex items-center gap-3"><Search className="text-gray-400" size={20} /><input type="text" placeholder={t('search')} className="flex-1 outline-none text-gray-700 dark:text-white bg-transparent" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+        {/* Enhanced Search Toolbar */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800 mb-6">
+            <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                    <input 
+                        type="text" 
+                        placeholder="Search by name, phone, or ID..." 
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-primary)] dark:text-white transition-all" 
+                        value={searchTerm} 
+                        onChange={(e) => setSearchTerm(e.target.value)} 
+                    />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 no-scrollbar">
+                    <div className="relative min-w-[140px]">
+                        <select 
+                            className="w-full appearance-none px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-[var(--color-primary)] cursor-pointer"
+                            value={filterGender}
+                            onChange={(e) => setFilterGender(e.target.value)}
+                        >
+                            <option value="">All Genders</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                    </div>
+
+                    <div className="relative min-w-[160px]">
+                        <select 
+                            className="w-full appearance-none px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-[var(--color-primary)] cursor-pointer"
+                            value={filterBloodGroup}
+                            onChange={(e) => setFilterBloodGroup(e.target.value)}
+                        >
+                            <option value="">All Blood Groups</option>
+                            {BLOOD_GROUPS.filter(g => g !== 'Unknown').map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                    </div>
+                    
+                    {(searchTerm || filterGender || filterBloodGroup) && (
+                        <button 
+                            onClick={clearFilters}
+                            className="px-4 py-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-sm font-bold border border-red-100 dark:border-red-900 hover:bg-red-100 transition-colors flex items-center gap-2 whitespace-nowrap"
+                        >
+                            <X size={16}/> Clear
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
 
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800 overflow-hidden">
             <table className="w-full text-left">
@@ -292,181 +370,185 @@ const Patients = () => {
                     <tr><th className="p-4 text-gray-600 dark:text-gray-300">Name</th><th className="p-4 text-gray-600 dark:text-gray-300">Contact</th><th className="p-4 text-gray-600 dark:text-gray-300">Bio</th><th className="p-4 text-right">Action</th></tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                    {patients.map(p => {
-                        const isExpanded = expandedRow === p.id;
-                        return (
-                        <React.Fragment key={p.id}>
-                            <tr className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800/30 border-l-4 ${isExpanded ? 'border-l-[var(--color-primary)] bg-teal-50/30' : 'border-l-transparent'}`} onClick={() => toggleExpand(p.id)}>
-                                <td className="p-4"><div className="flex gap-3 items-center"><div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300">{p.name.charAt(0)}</div><div><p className="font-bold text-gray-800 dark:text-white">{p.name}</p><p className="text-xs text-gray-400">#{p.id}</p></div></div></td>
-                                <td className="p-4 text-sm text-gray-600 dark:text-gray-300"><div>{p.phone}</div><div className="text-xs opacity-70">{p.address}</div></td>
-                                <td className="p-4 text-sm text-gray-600 dark:text-gray-300">{getAge(p.dob)} yrs, {p.gender}</td>
-                                <td className="p-4 text-right"><button onClick={(e) => handleEditPatient(p, e)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><Edit3 size={16}/></button></td>
-                            </tr>
-                            {isExpanded && (
-                                <tr className="bg-gray-50 dark:bg-slate-800/30"><td colSpan={4} className="p-6">
-                                    <div className="flex gap-4 border-b border-gray-200 dark:border-slate-700 mb-6 overflow-x-auto">
-                                        {['info', 'timeline', 'appointments', 'trends', 'rx', 'docs'].map(tab => (
-                                            <button key={tab} onClick={() => setActiveTab(tab as any)} className={`pb-2 px-2 text-sm font-bold capitalize border-b-2 transition-all ${activeTab === tab ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-gray-500'}`}>
-                                                {tab === 'trends' ? 'Vitals Trends' : tab}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    
-                                    {/* VITALS TRENDS */}
-                                    {activeTab === 'trends' && (
-                                        <div className="space-y-6 animate-fade-in-up">
-                                            {vitalsData.length < 2 ? (
-                                                <div className="text-center py-10 text-gray-400 bg-white dark:bg-slate-900 rounded-xl border border-dashed border-gray-300 dark:border-slate-700">
-                                                    <Activity size={32} className="mx-auto mb-2 opacity-50"/>
-                                                    <p>Not enough data points. Record more visits with vitals.</p>
-                                                </div>
-                                            ) : (
-                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                                    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
-                                                        <h4 className="font-bold text-gray-700 dark:text-white mb-4 flex items-center gap-2"><Activity size={16} className="text-rose-500"/> Blood Pressure</h4>
-                                                        <div className="h-64">
-                                                            <ResponsiveContainer width="100%" height="100%">
-                                                                <LineChart data={vitalsData}>
-                                                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                                                                    <XAxis dataKey="date" fontSize={10} tick={{fill: '#9ca3af'}} />
-                                                                    <YAxis domain={[60, 200]} fontSize={10} tick={{fill: '#9ca3af'}} />
-                                                                    <Tooltip contentStyle={{backgroundColor:'#1e293b', border:'none', borderRadius:'8px', color:'#fff'}} />
-                                                                    <Line type="monotone" dataKey="systolic" stroke="#ef4444" strokeWidth={2} name="Systolic" />
-                                                                    <Line type="monotone" dataKey="diastolic" stroke="#3b82f6" strokeWidth={2} name="Diastolic" />
-                                                                </LineChart>
-                                                            </ResponsiveContainer>
-                                                        </div>
-                                                    </div>
-                                                    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
-                                                        <h4 className="font-bold text-gray-700 dark:text-white mb-4 flex items-center gap-2"><HeartPulse size={16} className="text-orange-500"/> Heart Rate</h4>
-                                                        <div className="h-64">
-                                                            <ResponsiveContainer width="100%" height="100%">
-                                                                <AreaChart data={vitalsData}>
-                                                                    <defs>
-                                                                        <linearGradient id="colorHr" x1="0" y1="0" x2="0" y2="1">
-                                                                            <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
-                                                                            <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
-                                                                        </linearGradient>
-                                                                    </defs>
-                                                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                                                                    <XAxis dataKey="date" fontSize={10} tick={{fill: '#9ca3af'}} />
-                                                                    <YAxis domain={[40, 120]} fontSize={10} tick={{fill: '#9ca3af'}} />
-                                                                    <Tooltip contentStyle={{backgroundColor:'#1e293b', border:'none', borderRadius:'8px', color:'#fff'}} />
-                                                                    <Area type="monotone" dataKey="heartRate" stroke="#f97316" fillOpacity={1} fill="url(#colorHr)" />
-                                                                </AreaChart>
-                                                            </ResponsiveContainer>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* INFO TAB */}
-                                    {activeTab === 'info' && <div className="animate-fade-in-up grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                        <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg ring-4 ring-slate-900/50">
-                                            <div className="flex justify-between mb-6 border-b border-white/10 pb-3"><h4 className="font-bold flex items-center gap-2 text-emerald-400"><Activity size={18}/> VITALS</h4><span className="text-xs text-slate-400">{getLatestVitals(p.history)?.date}</span></div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="text-center p-3 rounded-lg bg-black/20 border border-white/5"><div className="text-rose-400 text-xs font-bold uppercase">HR</div><p className="text-3xl font-mono font-bold">{getLatestVitals(p.history)?.heartRate||'--'}</p></div>
-                                                <div className="text-center p-3 rounded-lg bg-black/20 border border-white/5"><div className="text-sky-400 text-xs font-bold uppercase">BP</div><p className="text-3xl font-mono font-bold">{getLatestVitals(p.history)?.bp||'--'}</p></div>
-                                                <div className="text-center p-3 rounded-lg bg-black/20 border border-white/5"><div className="text-purple-400 text-xs font-bold uppercase">Temp</div><p className="text-3xl font-mono font-bold">{getLatestVitals(p.history)?.temperature||'--'}</p></div>
-                                                <div className="text-center p-3 rounded-lg bg-black/20 border border-white/5"><div className="text-emerald-400 text-xs font-bold uppercase">Wt</div><p className="text-3xl font-mono font-bold">{p.weight||'--'}</p></div>
-                                            </div>
-                                        </div>
-                                        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                                            <div className="flex justify-between items-center mb-6"><h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2"><Shield size={20} className="text-[var(--color-primary)]"/> Medical Profile</h4></div>
-                                            <div className="grid grid-cols-2 gap-6">
-                                                <div><h5 className="text-xs font-bold text-slate-400 uppercase mb-3">Demographics</h5><ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300"><li>Name: <b>{p.name}</b></li><li>Gender: {p.gender}</li><li>Age: {getAge(p.dob)}</li></ul></div>
-                                                <div><h5 className="text-xs font-bold text-slate-400 uppercase mb-3">Biometrics</h5><ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300"><li>Blood: <span className="bg-rose-500 text-white px-1.5 rounded">{p.blood_group}</span></li><li>Height: {p.height}cm</li><li>BMI: <b>{calculateBMI(p.weight, p.height).value}</b></li></ul></div>
-                                            </div>
-                                            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                                                <div className="flex gap-2 mb-2">
-                                                    <span className="text-xs font-bold bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-1 rounded">Allergies: {p.allergies}</span>
-                                                    <span className="text-xs font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-2 py-1 rounded">Conditions: {p.chronic_conditions}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>}
-
-                                    {/* TIMELINE TAB */}
-                                    {activeTab === 'timeline' && <div className="animate-fade-in-up">
-                                        <div className="flex justify-between mb-4"><h4 className="font-bold text-slate-700 dark:text-white">History Log</h4><button onClick={openVisitModal} className="bg-slate-900 dark:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-2"><FilePlus size={14}/> Add Note</button></div>
-                                        <div className="border-l-2 border-slate-200 dark:border-slate-700 ml-4 space-y-6 py-2">
-                                            {JSON.parse(p.history).map((h:any,i:number)=>(
-                                                <div key={i} className="pl-6 relative"><div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-[var(--color-primary)] border-4 border-white dark:border-slate-800"></div><div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"><div className="flex justify-between mb-2"><h5 className="font-bold text-slate-800 dark:text-white">{h.diagnosis||'Visit'}</h5><span className="text-xs text-slate-500 dark:text-slate-400">{h.date}</span></div><p className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-2 rounded">{h.treatment}</p></div></div>
+                    {patients.length === 0 ? (
+                        <tr><td colSpan={4} className="p-8 text-center text-gray-400">No patients found matching your criteria.</td></tr>
+                    ) : (
+                        patients.map(p => {
+                            const isExpanded = expandedRow === p.id;
+                            return (
+                            <React.Fragment key={p.id}>
+                                <tr className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800/30 border-l-4 ${isExpanded ? 'border-l-[var(--color-primary)] bg-teal-50/30' : 'border-l-transparent'}`} onClick={() => toggleExpand(p.id)}>
+                                    <td className="p-4"><div className="flex gap-3 items-center"><div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300">{p.name.charAt(0)}</div><div><p className="font-bold text-gray-800 dark:text-white">{p.name}</p><p className="text-xs text-gray-400">#{p.id}</p></div></div></td>
+                                    <td className="p-4 text-sm text-gray-600 dark:text-gray-300"><div>{p.phone}</div><div className="text-xs opacity-70">{p.address}</div></td>
+                                    <td className="p-4 text-sm text-gray-600 dark:text-gray-300">{getAge(p.dob)} yrs, {p.gender}</td>
+                                    <td className="p-4 text-right"><button onClick={(e) => handleEditPatient(p, e)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><Edit3 size={16}/></button></td>
+                                </tr>
+                                {isExpanded && (
+                                    <tr className="bg-gray-50 dark:bg-slate-800/30"><td colSpan={4} className="p-6">
+                                        <div className="flex gap-4 border-b border-gray-200 dark:border-slate-700 mb-6 overflow-x-auto">
+                                            {['info', 'timeline', 'appointments', 'trends', 'rx', 'docs'].map(tab => (
+                                                <button key={tab} onClick={() => setActiveTab(tab as any)} className={`pb-2 px-2 text-sm font-bold capitalize border-b-2 transition-all ${activeTab === tab ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-gray-500'}`}>
+                                                    {tab === 'trends' ? 'Vitals Trends' : tab}
+                                                </button>
                                             ))}
                                         </div>
-                                    </div>}
-
-                                    {/* APPOINTMENTS TAB */}
-                                    {activeTab === 'appointments' && <div className="animate-fade-in-up">
-                                        <div className="flex justify-between mb-4">
-                                            <h4 className="font-bold text-slate-700 dark:text-white">Recent Appointments</h4>
-                                            <button onClick={() => setShowBookingModal(true)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors">
-                                                <Calendar size={14}/> {t('create_appointment')}
-                                            </button>
-                                        </div>
-                                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-                                            <table className="w-full text-left text-sm">
-                                                <thead className="bg-gray-50 dark:bg-slate-800">
-                                                    <tr><th className="p-3">Date</th><th className="p-3">Doctor</th><th className="p-3">Status</th><th className="p-3 text-right">Payment</th></tr>
-                                                </thead>
-                                                <tbody>
-                                                    {patientAppointments.map(app => (
-                                                        <tr key={app.id} className="border-t border-slate-100 dark:border-slate-800">
-                                                            <td className="p-3 font-medium">{app.date}</td>
-                                                            <td className="p-3">{app.doctorName} <span className="text-xs text-gray-400 ml-1">{app.specialty}</span></td>
-                                                            <td className="p-3"><span className="bg-gray-100 dark:bg-slate-700 px-2 py-1 rounded text-xs">{app.status}</span></td>
-                                                            <td className="p-3 text-right"><span className={`px-2 py-1 rounded text-xs font-bold ${app.paymentStatus === 'Paid' ? 'text-green-600 bg-green-50' : 'text-orange-600 bg-orange-50'}`}>{app.paymentStatus}</span></td>
-                                                        </tr>
-                                                    ))}
-                                                    {patientAppointments.length === 0 && <tr><td colSpan={4} className="p-4 text-center text-gray-400">No appointments found.</td></tr>}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>}
-
-                                    {/* RX TAB */}
-                                    {activeTab === 'rx' && <div className="animate-fade-in-up">
-                                        <div className="flex justify-between mb-4">
-                                            <h4 className="font-bold text-slate-700 dark:text-white">Prescriptions</h4>
-                                            <button onClick={() => navigate('/prescriptions', { state: { patientId: p.id } })} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-indigo-700 transition-colors">
-                                                <FileText size={14}/> New Prescription
-                                            </button>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{patientPrescriptions.map(rx=>(<div key={rx.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4 rounded-xl shadow-sm"><div className="flex justify-between mb-2"><span className="text-xs font-bold bg-teal-50 text-teal-700 px-2 py-1 rounded">Rx #{rx.id}</span><span className="text-xs text-slate-400">{rx.date}</span></div><div className="space-y-1 mb-2">{JSON.parse(rx.items).map((it:any,ix:number)=>(<div key={ix} className="text-sm text-slate-700 dark:text-slate-300"><b>{it.name}</b> <span className="text-xs text-slate-500">{it.dosage}</span></div>))}</div></div>))}</div>
-                                    </div>}
-
-                                    {/* DOCS TAB */}
-                                    {activeTab === 'docs' && <div className="animate-fade-in-up space-y-6">
-                                        <div className="flex justify-between mb-2"><h4 className="font-bold text-slate-700 dark:text-white">Attachments & Labs</h4></div>
                                         
-                                        <FileDropzone onFilesAdded={handleFilesAdded} />
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                                            {patientDocs.map(doc=>(
-                                                <div key={doc.id} className="flex justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl items-center group hover:border-[var(--color-primary)] transition-colors">
-                                                    <div className="flex gap-3 items-center">
-                                                        <div className={`p-2 rounded-lg ${doc.type.includes('pdf') ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
-                                                            {doc.type.includes('pdf') ? <FileText size={20}/> : <ImageIcon size={20}/>}
+                                        {/* VITALS TRENDS */}
+                                        {activeTab === 'trends' && (
+                                            <div className="space-y-6 animate-fade-in-up">
+                                                {vitalsData.length < 2 ? (
+                                                    <div className="text-center py-10 text-gray-400 bg-white dark:bg-slate-900 rounded-xl border border-dashed border-gray-300 dark:border-slate-700">
+                                                        <Activity size={32} className="mx-auto mb-2 opacity-50"/>
+                                                        <p>Not enough data points. Record more visits with vitals.</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
+                                                            <h4 className="font-bold text-gray-700 dark:text-white mb-4 flex items-center gap-2"><Activity size={16} className="text-rose-500"/> Blood Pressure</h4>
+                                                            <div className="h-64">
+                                                                <ResponsiveContainer width="100%" height="100%">
+                                                                    <LineChart data={vitalsData}>
+                                                                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                                                                        <XAxis dataKey="date" fontSize={10} tick={{fill: '#9ca3af'}} />
+                                                                        <YAxis domain={[60, 200]} fontSize={10} tick={{fill: '#9ca3af'}} />
+                                                                        <Tooltip contentStyle={{backgroundColor:'#1e293b', border:'none', borderRadius:'8px', color:'#fff'}} />
+                                                                        <Line type="monotone" dataKey="systolic" stroke="#ef4444" strokeWidth={2} name="Systolic" />
+                                                                        <Line type="monotone" dataKey="diastolic" stroke="#3b82f6" strokeWidth={2} name="Diastolic" />
+                                                                    </LineChart>
+                                                                </ResponsiveContainer>
+                                                            </div>
                                                         </div>
-                                                        <div className="overflow-hidden">
-                                                            <span className="font-bold text-sm text-slate-800 dark:text-white block truncate max-w-[150px]">{doc.name}</span>
-                                                            <span className="text-[10px] text-gray-400">{doc.size} • {doc.uploadDate}</span>
+                                                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
+                                                            <h4 className="font-bold text-gray-700 dark:text-white mb-4 flex items-center gap-2"><HeartPulse size={16} className="text-orange-500"/> Heart Rate</h4>
+                                                            <div className="h-64">
+                                                                <ResponsiveContainer width="100%" height="100%">
+                                                                    <AreaChart data={vitalsData}>
+                                                                        <defs>
+                                                                            <linearGradient id="colorHr" x1="0" y1="0" x2="0" y2="1">
+                                                                                <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
+                                                                                <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
+                                                                            </linearGradient>
+                                                                        </defs>
+                                                                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                                                                        <XAxis dataKey="date" fontSize={10} tick={{fill: '#9ca3af'}} />
+                                                                        <YAxis domain={[40, 120]} fontSize={10} tick={{fill: '#9ca3af'}} />
+                                                                        <Tooltip contentStyle={{backgroundColor:'#1e293b', border:'none', borderRadius:'8px', color:'#fff'}} />
+                                                                        <Area type="monotone" dataKey="heartRate" stroke="#f97316" fillOpacity={1} fill="url(#colorHr)" />
+                                                                    </AreaChart>
+                                                                </ResponsiveContainer>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                    <div className="flex gap-1">
-                                                        <button onClick={()=>setShowDocViewer(doc)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white"><Eye size={16}/></button>
-                                                        <button onClick={()=>deleteDoc(doc.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* INFO TAB */}
+                                        {activeTab === 'info' && <div className="animate-fade-in-up grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                            <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg ring-4 ring-slate-900/50">
+                                                <div className="flex justify-between mb-6 border-b border-white/10 pb-3"><h4 className="font-bold flex items-center gap-2 text-emerald-400"><Activity size={18}/> VITALS</h4><span className="text-xs text-slate-400">{getLatestVitals(p.history)?.date}</span></div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="text-center p-3 rounded-lg bg-black/20 border border-white/5"><div className="text-rose-400 text-xs font-bold uppercase">HR</div><p className="text-3xl font-mono font-bold">{getLatestVitals(p.history)?.heartRate||'--'}</p></div>
+                                                    <div className="text-center p-3 rounded-lg bg-black/20 border border-white/5"><div className="text-sky-400 text-xs font-bold uppercase">BP</div><p className="text-3xl font-mono font-bold">{getLatestVitals(p.history)?.bp||'--'}</p></div>
+                                                    <div className="text-center p-3 rounded-lg bg-black/20 border border-white/5"><div className="text-purple-400 text-xs font-bold uppercase">Temp</div><p className="text-3xl font-mono font-bold">{getLatestVitals(p.history)?.temperature||'--'}</p></div>
+                                                    <div className="text-center p-3 rounded-lg bg-black/20 border border-white/5"><div className="text-emerald-400 text-xs font-bold uppercase">Wt</div><p className="text-3xl font-mono font-bold">{p.weight||'--'}</p></div>
+                                                </div>
+                                            </div>
+                                            <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                                <div className="flex justify-between items-center mb-6"><h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2"><Shield size={20} className="text-[var(--color-primary)]"/> Medical Profile</h4></div>
+                                                <div className="grid grid-cols-2 gap-6">
+                                                    <div><h5 className="text-xs font-bold text-slate-400 uppercase mb-3">Demographics</h5><ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300"><li>Name: <b>{p.name}</b></li><li>Gender: {p.gender}</li><li>Age: {getAge(p.dob)}</li></ul></div>
+                                                    <div><h5 className="text-xs font-bold text-slate-400 uppercase mb-3">Biometrics</h5><ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300"><li>Blood: <span className="bg-rose-500 text-white px-1.5 rounded">{p.blood_group}</span></li><li>Height: {p.height}cm</li><li>BMI: <b>{calculateBMI(p.weight, p.height).value}</b></li></ul></div>
+                                                </div>
+                                                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                                    <div className="flex gap-2 mb-2">
+                                                        <span className="text-xs font-bold bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-1 rounded">Allergies: {p.allergies}</span>
+                                                        <span className="text-xs font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-2 py-1 rounded">Conditions: {p.chronic_conditions}</span>
                                                     </div>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>}
-                                </td></tr>
-                            )}
-                        </React.Fragment>
-                    )})}
+                                            </div>
+                                        </div>}
+
+                                        {/* TIMELINE TAB */}
+                                        {activeTab === 'timeline' && <div className="animate-fade-in-up">
+                                            <div className="flex justify-between mb-4"><h4 className="font-bold text-slate-700 dark:text-white">History Log</h4><button onClick={openVisitModal} className="bg-slate-900 dark:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-2"><FilePlus size={14}/> Add Note</button></div>
+                                            <div className="border-l-2 border-slate-200 dark:border-slate-700 ml-4 space-y-6 py-2">
+                                                {JSON.parse(p.history).map((h:any,i:number)=>(
+                                                    <div key={i} className="pl-6 relative"><div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-[var(--color-primary)] border-4 border-white dark:border-slate-800"></div><div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"><div className="flex justify-between mb-2"><h5 className="font-bold text-slate-800 dark:text-white">{h.diagnosis||'Visit'}</h5><span className="text-xs text-slate-500 dark:text-slate-400">{h.date}</span></div><p className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-2 rounded">{h.treatment}</p></div></div>
+                                                ))}
+                                            </div>
+                                        </div>}
+
+                                        {/* APPOINTMENTS TAB */}
+                                        {activeTab === 'appointments' && <div className="animate-fade-in-up">
+                                            <div className="flex justify-between mb-4">
+                                                <h4 className="font-bold text-slate-700 dark:text-white">Recent Appointments</h4>
+                                                <button onClick={() => setShowBookingModal(true)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors">
+                                                    <Calendar size={14}/> {t('create_appointment')}
+                                                </button>
+                                            </div>
+                                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                                                <table className="w-full text-left text-sm">
+                                                    <thead className="bg-gray-50 dark:bg-slate-800">
+                                                        <tr><th className="p-3">Date</th><th className="p-3">Doctor</th><th className="p-3">Status</th><th className="p-3 text-right">Payment</th></tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {patientAppointments.map(app => (
+                                                            <tr key={app.id} className="border-t border-slate-100 dark:border-slate-800">
+                                                                <td className="p-3 font-medium">{app.date}</td>
+                                                                <td className="p-3">{app.doctorName} <span className="text-xs text-gray-400 ml-1">{app.specialty}</span></td>
+                                                                <td className="p-3"><span className="bg-gray-100 dark:bg-slate-700 px-2 py-1 rounded text-xs">{app.status}</span></td>
+                                                                <td className="p-3 text-right"><span className={`px-2 py-1 rounded text-xs font-bold ${app.paymentStatus === 'Paid' ? 'text-green-600 bg-green-50' : 'text-orange-600 bg-orange-50'}`}>{app.paymentStatus}</span></td>
+                                                            </tr>
+                                                        ))}
+                                                        {patientAppointments.length === 0 && <tr><td colSpan={4} className="p-4 text-center text-gray-400">No appointments found.</td></tr>}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>}
+
+                                        {/* RX TAB */}
+                                        {activeTab === 'rx' && <div className="animate-fade-in-up">
+                                            <div className="flex justify-between mb-4">
+                                                <h4 className="font-bold text-slate-700 dark:text-white">Prescriptions</h4>
+                                                <button onClick={() => navigate('/prescriptions', { state: { patientId: p.id } })} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                                                    <FileText size={14}/> New Prescription
+                                                </button>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{patientPrescriptions.map(rx=>(<div key={rx.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4 rounded-xl shadow-sm"><div className="flex justify-between mb-2"><span className="text-xs font-bold bg-teal-50 text-teal-700 px-2 py-1 rounded">Rx #{rx.id}</span><span className="text-xs text-slate-400">{rx.date}</span></div><div className="space-y-1 mb-2">{JSON.parse(rx.items).map((it:any,ix:number)=>(<div key={ix} className="text-sm text-slate-700 dark:text-slate-300"><b>{it.name}</b> <span className="text-xs text-slate-500">{it.dosage}</span></div>))}</div></div>))}</div>
+                                        </div>}
+
+                                        {/* DOCS TAB */}
+                                        {activeTab === 'docs' && <div className="animate-fade-in-up space-y-6">
+                                            <div className="flex justify-between mb-2"><h4 className="font-bold text-slate-700 dark:text-white">Attachments & Labs</h4></div>
+                                            
+                                            <FileDropzone onFilesAdded={handleFilesAdded} />
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                                                {patientDocs.map(doc=>(
+                                                    <div key={doc.id} className="flex justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl items-center group hover:border-[var(--color-primary)] transition-colors">
+                                                        <div className="flex gap-3 items-center">
+                                                            <div className={`p-2 rounded-lg ${doc.type.includes('pdf') ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'}`}>
+                                                                {doc.type.includes('pdf') ? <FileText size={20}/> : <ImageIcon size={20}/>}
+                                                            </div>
+                                                            <div className="overflow-hidden">
+                                                                <span className="font-bold text-sm text-slate-800 dark:text-white block truncate max-w-[150px]">{doc.name}</span>
+                                                                <span className="text-[10px] text-gray-400">{doc.size} • {doc.uploadDate}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-1">
+                                                            <button onClick={()=>setShowDocViewer(doc)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white"><Eye size={16}/></button>
+                                                            <button onClick={()=>deleteDoc(doc.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>}
+                                    </td></tr>
+                                )}
+                            </React.Fragment>
+                        })
+                    )}
                 </tbody>
             </table>
         </div>

@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { dbService } from './services/db';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -7,20 +7,29 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { ShortcutProvider } from './contexts/ShortcutContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
-import Appointments from './pages/Appointments';
-import Patients from './pages/Patients';
-import Doctors from './pages/Doctors';
-import Nurses from './pages/Nurses';
-import Services from './pages/Services';
-import Prescriptions from './pages/Prescriptions';
-import Finances from './pages/Finances';
-import Settings from './pages/Settings';
-import Login from './pages/Login';
-import Notifications from './pages/Notifications';
-import QueueDisplay from './pages/QueueDisplay';
 import { Loader2 } from 'lucide-react';
 import { UserRole } from './types';
+import { broadcastService } from './services/broadcast';
+
+// Lazy Load Pages (Architectural enhancement for performance)
+const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const Appointments = React.lazy(() => import('./pages/Appointments'));
+const Patients = React.lazy(() => import('./pages/Patients'));
+const Doctors = React.lazy(() => import('./pages/Doctors'));
+const Nurses = React.lazy(() => import('./pages/Nurses'));
+const Services = React.lazy(() => import('./pages/Services'));
+const Prescriptions = React.lazy(() => import('./pages/Prescriptions'));
+const Finances = React.lazy(() => import('./pages/Finances'));
+const Settings = React.lazy(() => import('./pages/Settings'));
+const NotificationsPage = React.lazy(() => import('./pages/Notifications'));
+const Login = React.lazy(() => import('./pages/Login'));
+const QueueDisplay = React.lazy(() => import('./pages/QueueDisplay'));
+
+const LoadingFallback = () => (
+  <div className="h-full w-full flex items-center justify-center min-h-[400px]">
+    <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+  </div>
+);
 
 const ProtectedRoute = ({ children, allowedRoles = [] }: { children?: React.ReactNode, allowedRoles?: UserRole[] }) => {
   const { user } = useAuth();
@@ -42,6 +51,52 @@ const Initializer = ({ children }: { children?: React.ReactNode }) => {
     const init = async () => {
       try {
         await dbService.init();
+        
+        // Listen for cross-tab updates
+        broadcastService.subscribe((msg) => {
+            if (msg.type === 'db-update') {
+                // In a real scenario, trigger specific re-fetches.
+                // For Phase 1, we can trigger a soft reload or event
+                window.dispatchEvent(new Event('external-db-change'));
+            }
+        });
+
+        // Load settings safely
+        let settings: any[] = [];
+        try {
+            settings = dbService.query("SELECT * FROM settings");
+        } catch (e) {
+            console.warn("Could not load settings, using defaults", e);
+        }
+
+        const themeMode = settings.find((s: any) => s.key === 'theme_mode')?.value || 'light';
+        const activeDecoration = settings.find((s: any) => s.key === 'active_decoration')?.value || 'none';
+        
+        const root = document.documentElement;
+
+        root.classList.remove('theme-spring', 'theme-ramadan', 'theme-christmas', 'theme-halloween', 'theme-none');
+        root.classList.remove('dark');
+
+        if (themeMode === 'dark') {
+            root.classList.add('dark');
+        }
+
+        if (activeDecoration !== 'none') {
+            root.classList.add(`theme-${activeDecoration}`);
+            root.style.removeProperty('--color-primary');
+            root.style.removeProperty('--color-secondary');
+            root.style.removeProperty('--color-input-bg');
+        } else {
+            root.classList.add('theme-none');
+            const primary = settings.find((s: any) => s.key === 'primary_color')?.value;
+            const secondary = settings.find((s: any) => s.key === 'secondary_color')?.value;
+            const inputBg = settings.find((s: any) => s.key === 'input_bg_color')?.value;
+
+            if (primary) root.style.setProperty('--color-primary', primary);
+            if (secondary) root.style.setProperty('--color-secondary', secondary);
+            if (inputBg) root.style.setProperty('--color-input-bg', inputBg);
+        }
+
         setReady(true);
       } catch (err) {
         console.error("Initialization Failed:", err);
@@ -72,60 +127,62 @@ function App() {
           <ThemeProvider>
             <HashRouter>
               <ShortcutProvider> 
-                <Routes>
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/queue-tv" element={<QueueDisplay />} />
-                  
-                  <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                    <Route index element={<Navigate to="/dashboard" replace />} />
-                    <Route path="dashboard" element={<Dashboard />} />
-                    <Route path="appointments" element={<Appointments />} />
+                <Suspense fallback={<LoadingFallback />}>
+                  <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/queue-tv" element={<QueueDisplay />} />
                     
-                    <Route path="patients" element={
-                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.NURSE]}>
-                        <Patients />
-                      </ProtectedRoute>
-                    } />
-                    
-                    <Route path="doctors" element={
-                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
-                        <Doctors />
-                      </ProtectedRoute>
-                    } />
+                    <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                      <Route index element={<Navigate to="/dashboard" replace />} />
+                      <Route path="dashboard" element={<Dashboard />} />
+                      <Route path="appointments" element={<Appointments />} />
+                      
+                      <Route path="patients" element={
+                        <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.NURSE]}>
+                          <Patients />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="doctors" element={
+                        <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
+                          <Doctors />
+                        </ProtectedRoute>
+                      } />
 
-                    <Route path="nurses" element={
-                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
-                        <Nurses />
-                      </ProtectedRoute>
-                    } />
+                      <Route path="nurses" element={
+                        <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
+                          <Nurses />
+                        </ProtectedRoute>
+                      } />
 
-                    <Route path="services" element={
-                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
-                        <Services />
-                      </ProtectedRoute>
-                    } />
+                      <Route path="services" element={
+                        <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.RECEPTIONIST]}>
+                          <Services />
+                        </ProtectedRoute>
+                      } />
 
-                    <Route path="prescriptions" element={
-                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DOCTOR, UserRole.NURSE]}>
-                        <Prescriptions />
-                      </ProtectedRoute>
-                    } />
-                    
-                    <Route path="messages" element={<Notifications />} />
-                    
-                    <Route path="finances" element={
-                      <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.BILLING]}>
-                        <Finances />
-                      </ProtectedRoute>
-                    } />
-                    
-                    <Route path="settings" element={
-                      <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
-                        <Settings />
-                      </ProtectedRoute>
-                    } />
-                  </Route>
-                </Routes>
+                      <Route path="prescriptions" element={
+                        <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DOCTOR, UserRole.NURSE]}>
+                          <Prescriptions />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="messages" element={<NotificationsPage />} />
+                      
+                      <Route path="finances" element={
+                        <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.BILLING]}>
+                          <Finances />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="settings" element={
+                        <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+                          <Settings />
+                        </ProtectedRoute>
+                      } />
+                    </Route>
+                  </Routes>
+                </Suspense>
               </ShortcutProvider>
             </HashRouter>
           </ThemeProvider>

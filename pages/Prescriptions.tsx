@@ -35,6 +35,7 @@ const Prescriptions = () => {
   const [selectedDoctorId, setSelectedDoctorId] = useState<number>(0);
   const [rxItems, setRxItems] = useState<PrescriptionItem[]>([]);
   const [rxNotes, setRxNotes] = useState('');
+  const [rxDiagnosis, setRxDiagnosis] = useState('');
   
   // Temp Item State
   const [tempItem, setTempItem] = useState<PrescriptionItem>({ medicineId: 0, name: '', dosage: '', frequency: '', duration: '' });
@@ -92,10 +93,13 @@ const Prescriptions = () => {
 
   const savePrescription = () => {
     if (!selectedPatient) return alert(t('search') + " Patient");
-    dbService.exec(`INSERT INTO prescriptions (patientId, doctorId, date, items, notes) VALUES (?, ?, ?, ?, ?)`, [selectedPatient.id, selectedDoctorId, new Date().toISOString().split('T')[0], JSON.stringify(rxItems), rxNotes]);
+    dbService.exec(
+        `INSERT INTO prescriptions (patientId, doctorId, date, items, notes, diagnosis) VALUES (?, ?, ?, ?, ?, ?)`, 
+        [selectedPatient.id, selectedDoctorId, new Date().toISOString().split('T')[0], JSON.stringify(rxItems), rxNotes, rxDiagnosis]
+    );
     refreshRecentRx(); 
     alert(t('save') + " - Prescription Saved"); 
-    setRxItems([]); setRxNotes(''); setSelectedPatient(null);
+    setRxItems([]); setRxNotes(''); setRxDiagnosis(''); setSelectedPatient(null);
   };
 
   const saveTemplate = () => {
@@ -136,10 +140,6 @@ const Prescriptions = () => {
       const primaryColor = resolvedColors.primary; // e.g. #0d9488
 
       // Helper for RTL X-coordinates
-      // If RTL, x becomes (PageWidth - x). If LTR, x remains x.
-      // However, typical RTL layout simply mirrors alignment. 
-      // We will handle alignment manually for text.
-      
       const alignLeft = isRtl ? 'right' : 'left';
       const alignRight = isRtl ? 'left' : 'right';
       
@@ -170,8 +170,6 @@ const Prescriptions = () => {
       doc.setFont("helvetica", "bold");
       const titleX = clinicLogo ? margin + 35 : margin;
       
-      // If RTL, we align title to right side (or swap based on logo)
-      // For simplicity, let's center title if logo exists, or standard layout
       doc.text(clinicName, pageWidth / 2, 18, { align: 'center' });
       
       doc.setFontSize(10);
@@ -212,8 +210,18 @@ const Prescriptions = () => {
           doc.text(`${t('demographics')}: ${age}Y / ${selectedPatient.gender.charAt(0)}`, getColX(false), yPos + 10, { align: alignRight });
       }
 
+      // --- DIAGNOSIS ---
+      if (rxDiagnosis) {
+          yPos += 20;
+          doc.setTextColor(0);
+          doc.setFont("helvetica", "bold");
+          doc.text("Diagnosis:", isRtl ? pageWidth - margin : margin, yPos, { align: alignLeft });
+          doc.setFont("helvetica", "normal");
+          doc.text(rxDiagnosis, isRtl ? pageWidth - margin - 25 : margin + 25, yPos, { align: alignLeft });
+      }
+
       // --- RX BODY ---
-      yPos += 20;
+      yPos += rxDiagnosis ? 15 : 20;
       doc.setDrawColor(primaryColor);
       doc.setLineWidth(0.5);
       doc.line(margin, yPos - 5, pageWidth - margin, yPos - 5);
@@ -221,12 +229,9 @@ const Prescriptions = () => {
       doc.setFontSize(24);
       doc.setTextColor(primaryColor);
       doc.setFont("times", "italic");
-      doc.text("Rx", margin, yPos + 5); // Rx symbol always left logic or margin
+      doc.text("Rx", margin, yPos + 5); 
 
       // Table
-      // Note: jsPDF autoTable doesn't support complex RTL text reordering automatically
-      // We rely on 'halign' for column alignment.
-      
       const tableHeaders = isRtl 
         ? [[t('duration'), t('frequency'), t('dosage'), t('medication')]]
         : [[t('medication'), t('dosage'), t('frequency'), t('duration')]];
@@ -291,7 +296,7 @@ const Prescriptions = () => {
           <div><h1 className="text-2xl font-bold text-gray-800 dark:text-white">{t('new_prescription')}</h1><p className="text-sm text-gray-500 dark:text-gray-400">Clinical Rx Writer</p></div>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => { setRxItems([]); setSelectedPatient(null); }} className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg"><RotateCcw size={16} /> {t('reset')}</button>
+          <button onClick={() => { setRxItems([]); setSelectedPatient(null); setRxDiagnosis(''); setRxNotes(''); }} className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg"><RotateCcw size={16} /> {t('reset')}</button>
           <button onClick={savePrescription} disabled={!selectedPatient} className="flex items-center gap-2 px-6 py-2.5 bg-[var(--color-primary)] text-white font-bold rounded-lg hover:opacity-90 disabled:opacity-50"><Save size={18} /> {t('save')}</button>
         </div>
       </div>
@@ -340,7 +345,19 @@ const Prescriptions = () => {
 
           {/* Rx Builder */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-gray-200 dark:border-slate-800 flex-1 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
+            
+            {/* Diagnosis Field */}
+            <div className="mb-6">
+                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 flex items-center gap-2"><Activity size={14}/> Diagnosis</label>
+                <input 
+                    className="w-full border border-gray-200 dark:border-slate-700 rounded-xl p-3 bg-gray-50 dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-[var(--color-primary)] outline-none transition-all"
+                    placeholder="e.g. Acute Bronchitis"
+                    value={rxDiagnosis}
+                    onChange={e => setRxDiagnosis(e.target.value)}
+                />
+            </div>
+
+            <div className="flex justify-between items-center mb-4 border-t border-gray-100 dark:border-slate-800 pt-6">
                 <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><Stethoscope size={18} className="text-[var(--color-primary)]" /> {t('medication')}</h3>
                 <div className="flex gap-2">
                     <button onClick={() => setShowSaveTemplate(!showSaveTemplate)} className="text-xs bg-gray-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg font-bold hover:bg-gray-200 dark:hover:bg-slate-700">{t('save_template')}</button>
@@ -433,6 +450,14 @@ const Prescriptions = () => {
                         <p className="text-gray-500">{format(new Date(), 'yyyy-MM-dd')}</p>
                     </div>
                 </div>
+
+                {/* Diagnosis Preview */}
+                {rxDiagnosis && (
+                    <div className="mt-2">
+                        <span className="font-bold uppercase text-gray-400 text-[10px] block">Diagnosis</span>
+                        <span className="font-bold">{rxDiagnosis}</span>
+                    </div>
+                )}
 
                 {/* Rx Symbol */}
                 <div className="text-2xl font-bold text-slate-900 mt-4">Rx</div>

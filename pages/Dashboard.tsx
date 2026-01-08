@@ -5,20 +5,21 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { dbService } from '../services/db';
-import { AppointmentStatus, UserRole } from '../types';
+import { AppointmentStatus, UserRole, DoctorNote } from '../types';
 import { 
   Users, CheckCircle, Activity, DollarSign, Clock, Stethoscope, 
   TrendingUp, Plus, Calendar, User, Megaphone, CheckSquare,
-  UserPlus, Zap
+  UserPlus, Zap, Bell, AlertTriangle, Info, Pin
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
+import { format, parseISO, isAfter } from 'date-fns';
 
 const Dashboard = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
-  const { resolvedColors } = useTheme(); // Consuming resolved theme colors from Context
+  const { resolvedColors } = useTheme(); 
   const navigate = useNavigate();
   
   // State
@@ -26,6 +27,7 @@ const Dashboard = () => {
   const [queues, setQueues] = useState<any[]>([]);
   const [activePatient, setActivePatient] = useState<any>(null);
   const [chartData, setChartData] = useState<any[]>([]);
+  const [noticeBoard, setNoticeBoard] = useState<DoctorNote[]>([]);
 
   const isDoctor = user?.role === UserRole.DOCTOR;
 
@@ -88,6 +90,25 @@ const Dashboard = () => {
         { name: '1PM', count: 0 }, { name: '3PM', count: 0 }, { name: '5PM', count: 0 }
     ];
     setChartData(trafficData.map(d => ({ ...d, count: Math.floor(Math.random() * 8) + 2 })));
+
+    // Fetch Notes
+    try {
+        const allNotes = dbService.query("SELECT * FROM doctor_notes ORDER BY createdAt DESC");
+        const now = new Date();
+        const validNotes = allNotes.filter((n: DoctorNote) => {
+            // Visibility Check
+            if (n.visibility === 'Admin' && user?.role !== UserRole.ADMIN) return false;
+            if (n.visibility === 'Medical' && ![UserRole.ADMIN, UserRole.DOCTOR, UserRole.NURSE].includes(user?.role as UserRole)) return false;
+            
+            // Expiry Check
+            if (n.type === 'Temporary' && n.expiryDate && isAfter(now, parseISO(n.expiryDate))) return false;
+            
+            return true;
+        });
+        setNoticeBoard(validNotes);
+    } catch (e) {
+        console.error("Notes Error", e);
+    }
 
   }, [user, isDoctor]);
 
@@ -267,6 +288,56 @@ const Dashboard = () => {
         </div>
 
         <div className="space-y-8">
+            {/* Notice Board Widget */}
+            <div className="bg-surface rounded-2xl shadow-sm border border-borderSubtle transition-colors flex flex-col h-[400px]">
+                <div className="p-5 border-b border-borderSubtle bg-slate-50/50 dark:bg-slate-800/50 flex justify-between items-center">
+                    <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <Bell size={18} className="text-[var(--color-primary)]"/> {t('internal_notes')}
+                    </h4>
+                    <span className="text-[10px] font-bold bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2 py-1 rounded-full">{noticeBoard.length} Active</span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                    {noticeBoard.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-300 dark:text-slate-600">
+                            <Info size={32} className="mb-2 opacity-50" />
+                            <p className="text-sm font-medium">No active notices.</p>
+                        </div>
+                    ) : (
+                        noticeBoard.map(note => (
+                            <div key={note.id} className={`p-4 rounded-xl border relative transition-all group hover:shadow-sm ${
+                                note.priority === 'Critical' ? 'bg-red-50 border-red-100 dark:bg-red-900/10 dark:border-red-900/50' :
+                                note.priority === 'Important' ? 'bg-orange-50 border-orange-100 dark:bg-orange-900/10 dark:border-orange-900/50' :
+                                note.type === 'Instruction' ? 'bg-blue-50 border-blue-100 dark:bg-blue-900/10 dark:border-blue-900/50' :
+                                'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700'
+                            }`}>
+                                <div className="flex justify-between items-start mb-1">
+                                    <div className="flex items-center gap-2">
+                                        {note.priority === 'Critical' && <AlertTriangle size={14} className="text-red-500" />}
+                                        {note.type === 'Instruction' && <Pin size={14} className="text-blue-500" />}
+                                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                                            note.priority === 'Critical' ? 'text-red-600' : 
+                                            note.priority === 'Important' ? 'text-orange-600' : 'text-slate-500'
+                                        }`}>{note.priority}</span>
+                                    </div>
+                                    <span className="text-[10px] text-slate-400">{format(parseISO(note.createdAt), 'MMM d')}</span>
+                                </div>
+                                <p className="text-sm text-slate-700 dark:text-slate-200 font-medium leading-relaxed line-clamp-3">{note.text}</p>
+                                <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/5 flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                        <User size={10}/> {note.authorName}
+                                    </span>
+                                    {note.type === 'Temporary' && note.expiryDate && (
+                                        <span className="text-[10px] text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">
+                                            Exp: {note.expiryDate}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+
             <div className="bg-surface p-6 rounded-2xl shadow-sm border border-borderSubtle transition-colors h-[300px] flex flex-col">
                 <h4 className="font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
                     <TrendingUp size={18} className="text-[var(--color-primary)]"/> {t('traffic_trends')}
