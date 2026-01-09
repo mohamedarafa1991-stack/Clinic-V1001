@@ -515,7 +515,23 @@ const Patients = () => {
                                                     <FileText size={14}/> New Prescription
                                                 </button>
                                             </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{patientPrescriptions.map(rx=>(<div key={rx.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4 rounded-xl shadow-sm"><div className="flex justify-between mb-2"><span className="text-xs font-bold bg-teal-50 text-teal-700 px-2 py-1 rounded">Rx #{rx.id}</span><span className="text-xs text-slate-400">{rx.date}</span></div><div className="space-y-1 mb-2">{JSON.parse(rx.items).map((it:any,ix:number)=>(<div key={ix} className="text-sm text-slate-700 dark:text-slate-300"><b>{it.name}</b> <span className="text-xs text-slate-500">{it.dosage}</span></div>))}</div></div>))}</div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {patientPrescriptions.map(rx => (
+                                                    <div key={rx.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4 rounded-xl shadow-sm">
+                                                        <div className="flex justify-between mb-2">
+                                                            <span className="text-xs font-bold bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 px-2 py-1 rounded">Rx #{rx.id}</span>
+                                                            <span className="text-xs text-slate-400">{rx.date}</span>
+                                                        </div>
+                                                        <div className="space-y-1 mb-2">
+                                                            {JSON.parse(rx.items).map((it: any, ix: number) => (
+                                                                <div key={ix} className="text-sm text-slate-700 dark:text-slate-300">
+                                                                    <b>{it.name}</b> <span className="text-xs text-slate-500">{it.dosage}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>}
 
                                         {/* DOCS TAB */}
@@ -547,8 +563,9 @@ const Patients = () => {
                                     </td></tr>
                                 )}
                             </React.Fragment>
-                        })
-                    )}
+                        );
+                    })
+                )}
                 </tbody>
             </table>
         </div>
