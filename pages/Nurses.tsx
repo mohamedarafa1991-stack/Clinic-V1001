@@ -7,7 +7,7 @@ import { UserRole, Nurse, NurseNote } from '../types';
 import { 
   Plus, Edit3, Trash2, Syringe, Mail, Phone, X, Save, 
   DollarSign, Activity, User, StickyNote, BarChart2, EyeOff,
-  History, Clock, AlertTriangle, CheckCircle2
+  History, Clock, AlertTriangle, CheckCircle2, Lock, AlertCircle, Info
 } from 'lucide-react';
 import { format, parseISO, isAfter, formatDistanceToNow } from 'date-fns';
 import FileDropzone from '../components/FileDropzone';
@@ -157,8 +157,7 @@ const Nurses = () => {
       const now = new Date();
       return allNotes.filter(n => 
           n.nurseId === nurseId && 
-          (!n.expiryDate || !isAfter(now, parseISO(n.expiryDate))) &&
-          (n.type !== 'Temporary' || !n.expiryDate || !isAfter(now, parseISO(n.expiryDate))) // simplified check
+          (!n.expiryDate || !isAfter(now, parseISO(n.expiryDate)))
       );
   };
 
@@ -201,10 +200,12 @@ const Nurses = () => {
                             <StatusBadge status={nurse.status} />
                         </div>
                         
-                        <h3 className="font-bold text-lg text-gray-900 dark:text-white leading-tight mb-1 group-hover:text-[var(--color-primary)] transition-colors">
-                            {nurse.name}
-                        </h3>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide mb-4">Registered Nurse</p>
+                        <div className="mb-4">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">Registered Nurse</p>
+                            <h3 className="font-bold text-xl text-gray-900 dark:text-white leading-tight group-hover:text-[var(--color-primary)] transition-colors">
+                                {nurse.name}
+                            </h3>
+                        </div>
 
                         <div className="space-y-2 text-sm text-gray-500 dark:text-gray-400 mb-4">
                             <div className="flex items-center gap-2">
@@ -218,7 +219,7 @@ const Nurses = () => {
                         </div>
 
                         {/* Card Note Indicator */}
-                        {activeNotes.length > 0 && (
+                        {activeNotes.length > 0 && latestNote && (
                             <div className={`mt-4 p-3 rounded-xl border flex items-start gap-2 ${criticalCount > 0 ? 'bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-900/50' : 'bg-blue-50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-900/50'}`}>
                                 {criticalCount > 0 ? <AlertTriangle size={14} className="text-red-500 mt-0.5" /> : <StickyNote size={14} className="text-blue-500 mt-0.5" />}
                                 <div className="flex-1 min-w-0">
@@ -256,7 +257,7 @@ const Nurses = () => {
                 <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col animate-slide-in-right border-l rtl:border-l-0 rtl:border-r border-gray-200 dark:border-slate-800">
                     
                     {/* Header */}
-                    <div className="px-8 py-5 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 z-10">
+                    <div className="px-8 py-5 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 z-10 sticky top-0">
                         <div>
                             <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                 {isEditing || showAddModal ? <Edit3 size={24} className="text-[var(--color-primary)]"/> : <User size={24} className="text-[var(--color-primary)]"/>}
@@ -308,6 +309,26 @@ const Nurses = () => {
                         {/* TAB: PROFILE */}
                         {activeTab === 'profile' && (
                             <div className="space-y-8 animate-fade-in-up">
+                                 {/* Alerts Section in Profile */}
+                                 {getDisplayNotes().filter(n => n.priority !== 'Normal').length > 0 && (
+                                      <div className="mb-2 space-y-3">
+                                          {getDisplayNotes().filter(n => n.priority !== 'Normal').map(note => (
+                                              <div key={note.id} className={`p-4 rounded-xl border flex items-start gap-3 ${
+                                                  note.priority === 'Critical' 
+                                                    ? 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-900 dark:text-red-300' 
+                                                    : 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:border-amber-900 dark:text-amber-300'
+                                              }`}>
+                                                  <AlertCircle size={20} className="mt-0.5 shrink-0" />
+                                                  <div>
+                                                      <h5 className="font-bold text-sm uppercase mb-1">{note.priority} Alert</h5>
+                                                      <p className="text-sm leading-relaxed">{note.text}</p>
+                                                      <p className="text-xs mt-2 opacity-70 flex items-center gap-2"><Clock size={10}/> Expires: {note.expiryDate || 'Never'}</p>
+                                                  </div>
+                                              </div>
+                                          ))}
+                                      </div>
+                                  )}
+
                                 <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm">
                                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-6 flex items-center gap-2">
                                         <User size={14}/> Personal Details
@@ -362,7 +383,7 @@ const Nurses = () => {
                         {activeTab === 'notes' && (
                             <div className="animate-fade-in-up space-y-6">
                                 {/* Note Header & Actions */}
-                                <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
+                                <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm sticky top-0 z-10">
                                     <div>
                                         <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2"><StickyNote size={14}/> {t('internal_notes')}</h4>
                                         <p className="text-[10px] text-gray-400 mt-1">Instructions, temporary memos, and admin logs.</p>
@@ -371,7 +392,7 @@ const Nurses = () => {
                                         <button onClick={() => setShowNoteHistory(!showNoteHistory)} className={`p-2 rounded-lg border transition-colors ${showNoteHistory ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-700 hover:bg-gray-50'}`} title="Toggle History/Expired">
                                             <History size={16}/>
                                         </button>
-                                        <button onClick={() => setShowNoteForm(!showNoteForm)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${showNoteForm ? 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300' : 'bg-[var(--color-primary)] text-white shadow-lg shadow-[var(--color-primary)]/20'}`}>
+                                        <button onClick={() => setShowNoteForm(!showNoteForm)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all border ${showNoteForm ? 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-slate-700' : 'bg-[var(--color-primary)] text-white border-transparent shadow-lg shadow-[var(--color-primary)]/20'}`}>
                                             {showNoteForm ? t('cancel') : t('add')}
                                         </button>
                                     </div>
@@ -384,9 +405,9 @@ const Nurses = () => {
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 mb-1">{t('note_type')}</label>
                                                 <select className="w-full border p-2.5 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-white dark:border-slate-700 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)]" value={noteForm.type} onChange={e => setNoteForm({...noteForm, type: e.target.value as any})}>
-                                                    <option value="Permanent">{t('note_permanent')}</option>
-                                                    <option value="Temporary">{t('note_temp')}</option>
                                                     <option value="Instruction">{t('note_instruction')}</option>
+                                                    <option value="Temporary">{t('note_temp')}</option>
+                                                    <option value="Permanent">{t('note_permanent')}</option>
                                                 </select>
                                             </div>
                                             <div>
@@ -408,14 +429,17 @@ const Nurses = () => {
                                         </div>
                                         
                                         {noteForm.type === 'Temporary' && (
-                                            <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-100 dark:border-amber-800">
-                                                <label className="block text-xs font-bold text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1"><Clock size={12}/> {t('expiry_date')}</label>
-                                                <input type="date" className="w-full bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-700 p-2 rounded-lg text-sm" onChange={e => setNoteForm({...noteForm, expiryDate: e.target.value})} />
+                                            <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-100 dark:border-amber-800 flex items-center gap-3">
+                                                <Clock size={18} className="text-amber-600 dark:text-amber-400"/>
+                                                <div className="flex-1">
+                                                    <label className="block text-xs font-bold text-amber-700 dark:text-amber-400 mb-1">{t('expiry_date')}</label>
+                                                    <input type="date" className="w-full bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-700 p-2 rounded-lg text-sm" onChange={e => setNoteForm({...noteForm, expiryDate: e.target.value})} />
+                                                </div>
                                             </div>
                                         )}
 
                                         <textarea 
-                                            className="w-full border p-4 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-white dark:border-slate-700 h-32 focus:ring-2 focus:ring-[var(--color-primary)] outline-none resize-none"
+                                            className="w-full border p-4 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-white dark:border-slate-700 h-32 focus:ring-2 focus:ring-[var(--color-primary)] outline-none resize-none text-sm"
                                             placeholder={t('add_note_placeholder')}
                                             value={noteForm.text}
                                             onChange={(e) => setNoteForm({...noteForm, text: e.target.value})}
@@ -434,65 +458,71 @@ const Nurses = () => {
                                         const isExpired = note.type === 'Temporary' && note.expiryDate && isAfter(new Date(), parseISO(note.expiryDate));
                                         return (
                                             <div key={note.id} className={`p-5 rounded-2xl border relative group transition-all hover:shadow-md ${
-                                                isExpired ? 'bg-gray-100 border-gray-200 opacity-60 dark:bg-slate-800 dark:border-slate-700' :
-                                                note.priority === 'Critical' ? 'bg-red-50 border-red-100 dark:bg-red-900/10 dark:border-red-900/50' :
-                                                note.priority === 'Important' ? 'bg-orange-50 border-orange-100 dark:bg-orange-900/10 dark:border-orange-900/50' :
-                                                note.type === 'Instruction' ? 'bg-blue-50 border-blue-100 dark:bg-blue-900/10 dark:border-blue-900/50' :
-                                                'bg-white border-gray-200 dark:bg-slate-900 dark:border-slate-800'
+                                                isExpired ? 'opacity-60 border-dashed bg-gray-50 dark:bg-slate-800/50' : 
+                                                'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800'
                                             }`}>
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <div className="flex items-center gap-3">
-                                                        {/* Author Avatar */}
-                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 ${
-                                                            note.authorRole === UserRole.ADMIN ? 'bg-purple-100 text-purple-700 border-purple-200' :
-                                                            note.authorRole === UserRole.DOCTOR ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                                                            'bg-gray-100 text-gray-600 border-gray-200'
-                                                        }`} title={note.authorRole}>
-                                                            {note.authorName?.charAt(0) || '?'}
-                                                        </div>
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-sm font-bold text-gray-900 dark:text-white">{note.authorName}</span>
-                                                                <span className="text-[10px] text-gray-400 bg-gray-100 dark:bg-slate-800 px-1.5 rounded">{note.authorRole}</span>
+                                                <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-md ${
+                                                    note.priority === 'Critical' ? 'bg-red-500' : 
+                                                    note.priority === 'Important' ? 'bg-orange-500' :
+                                                    note.type === 'Instruction' ? 'bg-blue-500' : 'bg-gray-300'
+                                                }`}></div>
+
+                                                <div className="pl-4">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            {/* Author Badge */}
+                                                            <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 rounded-full pl-1 pr-3 py-1 border border-gray-200 dark:border-slate-700">
+                                                                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${
+                                                                    note.authorRole === UserRole.ADMIN ? 'bg-purple-500' : 
+                                                                    note.authorRole === UserRole.DOCTOR ? 'bg-blue-500' : 'bg-slate-500'
+                                                                }`}>
+                                                                    {note.authorName?.charAt(0) || '?'}
+                                                                </div>
+                                                                <span className="text-xs font-bold text-gray-600 dark:text-gray-300">{note.authorName}</span>
                                                             </div>
-                                                            <span className="text-[10px] text-gray-400">{format(parseISO(note.createdAt), 'MMM d, yyyy h:mm a')}</span>
+                                                            <span className="text-[10px] text-gray-400">{formatDistanceToNow(parseISO(note.createdAt), { addSuffix: true })}</span>
+                                                        </div>
+                                                        
+                                                        <div className="flex items-center gap-2">
+                                                            {isExpired && <span className="bg-gray-200 dark:bg-slate-700 text-gray-500 text-[10px] font-bold px-2 py-0.5 rounded uppercase">Expired</span>}
+                                                            
+                                                            {note.priority !== 'Normal' && (
+                                                                <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                                                                    note.priority === 'Critical' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+                                                                }`}>
+                                                                    <AlertCircle size={10}/> {note.priority}
+                                                                </span>
+                                                            )}
+                                                            
+                                                            {note.visibility !== 'All' && (
+                                                                <span className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded">
+                                                                    {note.visibility === 'Admin' ? <Lock size={10}/> : <EyeOff size={10}/>} {note.visibility}
+                                                                </span>
+                                                            )}
+                                                            
+                                                            {isAdmin && <button onClick={() => handleDeleteNote(note.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1 opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>}
                                                         </div>
                                                     </div>
                                                     
-                                                    <div className="flex items-center gap-2">
-                                                        {isExpired && <span className="bg-gray-200 text-gray-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Expired</span>}
-                                                        
-                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                                                            note.priority === 'Critical' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
-                                                            note.priority === 'Important' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' :
-                                                            'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-gray-400'
-                                                        }`}>{note.priority}</span>
-                                                        
-                                                        {note.visibility !== 'All' && <span className="flex items-center gap-1 text-[10px] font-bold text-gray-400 border border-gray-200 dark:border-slate-700 px-2 py-0.5 rounded"><EyeOff size={10}/> {note.visibility}</span>}
-                                                        
-                                                        {isAdmin && <button onClick={() => handleDeleteNote(note.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1 opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>}
-                                                    </div>
+                                                    <p className={`text-sm leading-relaxed whitespace-pre-wrap mt-2 ${isExpired ? 'text-gray-400 line-through' : 'text-gray-700 dark:text-gray-300'}`}>{note.text}</p>
+                                                    
+                                                    {note.type === 'Temporary' && note.expiryDate && (
+                                                        <div className="mt-3 flex items-center gap-2 text-[10px] text-amber-600 dark:text-amber-500 font-bold bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded w-fit">
+                                                            <Clock size={12}/> 
+                                                            Expires: {note.expiryDate}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                
-                                                <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isExpired ? 'text-gray-400 line-through' : 'text-gray-700 dark:text-gray-300'}`}>{note.text}</p>
-                                                
-                                                {note.type === 'Temporary' && note.expiryDate && (
-                                                    <div className="mt-3 pt-3 border-t border-black/5 dark:border-white/5 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-500">
-                                                        <Clock size={12}/> 
-                                                        <span>Expires: {note.expiryDate} ({isExpired ? 'Expired' : formatDistanceToNow(parseISO(note.expiryDate), { addSuffix: true })})</span>
-                                                    </div>
-                                                )}
                                             </div>
                                         );
                                     })}
                                     
                                     {getDisplayNotes().length === 0 && (
-                                        <div className="text-center py-16 border-2 border-dashed border-gray-100 dark:border-slate-800 rounded-2xl">
-                                            <div className="bg-gray-50 dark:bg-slate-800/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-300 dark:text-slate-600">
-                                                <StickyNote size={24}/>
+                                        <div className="text-center py-12 border-2 border-dashed border-gray-100 dark:border-slate-800 rounded-2xl">
+                                            <div className="bg-gray-50 dark:bg-slate-800/50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-300 dark:text-slate-600">
+                                                <Info size={20}/>
                                             </div>
                                             <p className="text-gray-400 text-sm font-medium">No active notes.</p>
-                                            <p className="text-xs text-gray-400 mt-1">Check history for archived items.</p>
                                         </div>
                                     )}
                                 </div>

@@ -123,6 +123,7 @@ const Doctors = () => {
   const [scheduleData, setScheduleData] = useState<WorkSchedule>(DEFAULT_SCHEDULE);
   const [doctorNotes, setDoctorNotes] = useState<DoctorNote[]>([]);
   const [doctorDocs, setDoctorDocs] = useState<any[]>([]);
+  const [allNotes, setAllNotes] = useState<DoctorNote[]>([]); // Cache for grid view
   
   // Note Form State
   const [noteForm, setNoteForm] = useState<Partial<DoctorNote>>({ type: 'Instruction', priority: 'Normal', visibility: 'All' });
@@ -130,13 +131,20 @@ const Doctors = () => {
   const [showNoteHistory, setShowNoteHistory] = useState(false);
 
   useEffect(() => { refreshDoctors(); }, []);
+  
   const refreshDoctors = () => { 
       setDoctors(dbService.query("SELECT * FROM doctors")); 
+      refreshAllNotes();
+  };
+
+  const refreshAllNotes = () => {
+      setAllNotes(dbService.query("SELECT * FROM doctor_notes"));
   };
 
   const loadSubData = (docId: number) => {
       setDoctorNotes(dbService.query(`SELECT * FROM doctor_notes WHERE doctorId = ${docId} ORDER BY createdAt DESC`));
       setDoctorDocs(dbService.query(`SELECT * FROM doctor_documents WHERE doctorId = ${docId} ORDER BY id DESC`));
+      refreshAllNotes(); 
   };
 
   const handleSelectDoctor = (doc: Doctor) => {
@@ -265,6 +273,20 @@ const Doctors = () => {
       });
   };
 
+  // Filter for critical alerts on Profile tab
+  const getCriticalAlerts = () => {
+      return getDisplayNotes().filter(n => n.priority === 'Critical' || n.priority === 'Important');
+  };
+
+  // Helper to get active note count for grid card
+  const getDoctorActiveNotes = (doctorId: number) => {
+      const now = new Date();
+      return allNotes.filter(n => 
+          n.doctorId === doctorId && 
+          (!n.expiryDate || !isAfter(now, parseISO(n.expiryDate)))
+      );
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-100px)]">
       {/* Page Header */}
@@ -287,53 +309,82 @@ const Doctors = () => {
 
       {/* Grid of Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-y-auto pb-20 p-1 custom-scrollbar">
-        {doctors.map(doc => (
-            <div 
-                key={doc.id} 
-                onClick={() => handleSelectDoctor(doc)} 
-                className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-[var(--color-primary)] dark:hover:border-[var(--color-primary)] cursor-pointer shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col h-full"
-            >
-                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                
-                <div className="p-6 flex-1">
-                    <div className="flex justify-between items-start mb-5">
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-800 dark:to-slate-800 flex items-center justify-center text-gray-500 dark:text-gray-400 font-bold text-xl shadow-inner border border-gray-100 dark:border-slate-700">
-                            {doc.name.charAt(0)}
-                        </div>
-                        <StatusBadge status={doc.status} />
-                    </div>
+        {doctors.map(doc => {
+            const activeNotes = getDoctorActiveNotes(doc.id);
+            const criticalCount = activeNotes.filter(n => n.priority === 'Critical').length;
+            const latestNote = activeNotes.sort((a,b) => b.id - a.id)[0];
+
+            return (
+                <div 
+                    key={doc.id} 
+                    onClick={() => handleSelectDoctor(doc)} 
+                    className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 hover:border-[var(--color-primary)] dark:hover:border-[var(--color-primary)] cursor-pointer shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col h-full"
+                >
+                    <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-secondary)] opacity-0 group-hover:opacity-100 transition-opacity"></div>
                     
-                    <h3 className="font-bold text-lg text-gray-900 dark:text-white leading-tight mb-1 group-hover:text-[var(--color-primary)] transition-colors">
-                        {doc.title} {doc.name}
-                    </h3>
-                    <p className="text-sm font-medium text-[var(--color-primary)] mb-4">{doc.specialty}</p>
+                    <div className="p-6 flex-1">
+                        <div className="flex justify-between items-start mb-5">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-800 dark:to-slate-800 flex items-center justify-center text-gray-500 dark:text-gray-400 font-bold text-xl shadow-inner border border-gray-100 dark:border-slate-700">
+                                {doc.name.charAt(0)}
+                            </div>
+                            <StatusBadge status={doc.status} />
+                        </div>
+                        
+                        <div className="mb-4">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">{doc.title}</p>
+                            <h3 className="font-bold text-xl text-gray-900 dark:text-white leading-tight group-hover:text-[var(--color-primary)] transition-colors">
+                                {doc.name}
+                            </h3>
+                            <p className="text-sm font-medium text-[var(--color-primary)] mt-1">{doc.specialty}</p>
+                        </div>
 
-                    <div className="space-y-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-slate-800/50 p-3 rounded-xl border border-gray-100 dark:border-slate-800">
-                        <div className="flex items-center gap-2">
-                            <Phone size={14} className="text-gray-400" /> 
-                            <span className="truncate">{doc.phone || 'No phone'}</span>
+                        <div className="space-y-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-slate-800/50 p-3 rounded-xl border border-gray-100 dark:border-slate-800">
+                            <div className="flex items-center gap-2">
+                                <Phone size={14} className="text-gray-400" /> 
+                                <span className="truncate">{doc.phone || 'No phone'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Mail size={14} className="text-gray-400" /> 
+                                <span className="truncate">{doc.email || 'No email'}</span>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Mail size={14} className="text-gray-400" /> 
-                            <span className="truncate">{doc.email || 'No email'}</span>
+
+                        {/* Card Note Indicator */}
+                        {activeNotes.length > 0 && latestNote && (
+                            <div className={`mt-4 p-3 rounded-xl border flex items-start gap-2 ${criticalCount > 0 ? 'bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-900/50' : 'bg-blue-50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-900/50'}`}>
+                                {criticalCount > 0 ? <AlertTriangle size={14} className="text-red-500 mt-0.5" /> : <StickyNote size={14} className="text-blue-500 mt-0.5" />}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex justify-between items-center mb-0.5">
+                                        <p className={`text-[10px] font-bold uppercase ${criticalCount > 0 ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                                            {criticalCount > 0 ? 'Critical Alert' : 'Active Note'}
+                                        </p>
+                                        {activeNotes.length > 1 && (
+                                            <span className="text-[9px] px-1.5 rounded-full bg-white dark:bg-black/20 text-gray-500 border border-black/5">+{activeNotes.length - 1} more</span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-600 dark:text-gray-300 truncate font-medium">
+                                        {latestNote.text}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 flex justify-between items-center text-xs">
+                        <div className="flex flex-col">
+                            <span className="text-gray-400 uppercase font-bold text-[10px] tracking-wide">Consultation</span>
+                            <span className="font-bold text-gray-800 dark:text-white text-sm">{doc.fee} EGP</span>
                         </div>
+                        {doc.commissionRate ? (
+                            <div className="flex flex-col text-right">
+                                <span className="text-gray-400 uppercase font-bold text-[10px] tracking-wide">Comm.</span>
+                                <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{doc.commissionRate}%</span>
+                            </div>
+                        ) : null}
                     </div>
                 </div>
-
-                <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 flex justify-between items-center text-xs">
-                    <div className="flex flex-col">
-                        <span className="text-gray-400 uppercase font-bold text-[10px] tracking-wide">Consultation</span>
-                        <span className="font-bold text-gray-800 dark:text-white text-sm">{doc.fee} EGP</span>
-                    </div>
-                    {doc.commissionRate ? (
-                        <div className="flex flex-col text-right">
-                            <span className="text-gray-400 uppercase font-bold text-[10px] tracking-wide">Comm.</span>
-                            <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{doc.commissionRate}%</span>
-                        </div>
-                    ) : null}
-                </div>
-            </div>
-        ))}
+            );
+        })}
       </div>
 
       {/* Side Panel Modal */}
@@ -398,6 +449,26 @@ const Doctors = () => {
                   {/* TAB: PROFILE */}
                   {activeTab === 'profile' && (
                       <div className="space-y-8 animate-fade-in-up">
+                          {/* Alerts Section in Profile */}
+                          {getCriticalAlerts().length > 0 && (
+                              <div className="mb-6 space-y-3">
+                                  {getCriticalAlerts().map(note => (
+                                      <div key={note.id} className={`p-4 rounded-xl border flex items-start gap-3 ${
+                                          note.priority === 'Critical' 
+                                            ? 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-900 dark:text-red-300' 
+                                            : 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:border-amber-900 dark:text-amber-300'
+                                      }`}>
+                                          <AlertCircle size={20} className="mt-0.5 shrink-0" />
+                                          <div>
+                                              <h5 className="font-bold text-sm uppercase mb-1">{note.priority} Alert</h5>
+                                              <p className="text-sm leading-relaxed">{note.text}</p>
+                                              <p className="text-xs mt-2 opacity-70 flex items-center gap-2"><Clock size={10}/> Expires: {note.expiryDate || 'Never'}</p>
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
+
                           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm">
                               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-6 flex items-center gap-2">
                                   <User size={14}/> Identity & Professional
