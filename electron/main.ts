@@ -4,13 +4,14 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { Buffer } from 'buffer';
+import { storageManager } from './storage';
 
 // Workaround for missing @types/node
 declare var __dirname: string;
 
 // --- F. Security: AES-256 Encryption for Database ---
-const ENCRYPTION_KEY_PATH = path.join(app.getPath('userData'), 'secure.key');
-const DB_PATH = path.join(app.getPath('userData'), 'medicore.enc');
+const ENCRYPTION_KEY_PATH = storageManager.getKeyPath();
+const DB_PATH = storageManager.getDatabasePath();
 
 function getEncryptionKey(): Buffer {
   if (fs.existsSync(ENCRYPTION_KEY_PATH)) { return fs.readFileSync(ENCRYPTION_KEY_PATH); }
@@ -130,7 +131,7 @@ ipcMain.handle('db-save', async (event, data: Uint8Array) => {
 ipcMain.handle('db-export', async (event, data: Uint8Array) => {
   const { filePath } = await dialog.showSaveDialog({
     title: 'Export Backup',
-    defaultPath: `medicore_backup_${new Date().toISOString().split('T')[0]}.sqlite`,
+    defaultPath: path.join(storageManager.getBackupPath(), `medicore_backup_${new Date().toISOString().split('T')[0]}.sqlite`),
     filters: [{ name: 'SQLite Database', extensions: ['sqlite', 'db'] }]
   });
   if (filePath) { fs.writeFileSync(filePath, Buffer.from(data)); return true; }
@@ -164,3 +165,5 @@ ipcMain.on('open-window', (event, route) => {
 });
 
 ipcMain.handle('get-version', () => app.getVersion());
+
+ipcMain.handle('get-storage-info', () => storageManager.getStorageInfo());

@@ -1,3 +1,14 @@
+/**
+ * @deprecated This file is deprecated. Use lanSync.ts instead.
+ * 
+ * The new LANSyncService provides:
+ * - Encrypted communication
+ * - Conflict resolution strategies
+ * - Audit logging
+ * - Better error handling
+ * 
+ * This file is kept for backward compatibility only.
+ */
 
 import { dbService } from './db';
 

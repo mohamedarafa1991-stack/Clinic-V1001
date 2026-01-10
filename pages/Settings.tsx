@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useShortcuts } from '../contexts/ShortcutContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { syncService } from '../services/sync';
+import { lanSyncService } from '../services/lanSync';
 import { hashPassword } from '../utils/security';
 import { 
   Save, Upload, Trash2, Users, Settings as SettingsIcon, Plus, 
@@ -57,7 +57,7 @@ const Settings = () => {
   useEffect(() => { 
       if (activeTab === 'users') loadUsers(); 
       if (activeTab === 'metadata') loadMetadata();
-      if (activeTab === 'sync') syncService.discoverPeers().then(setPeers);
+      if (activeTab === 'sync') lanSyncService.discoverPeers().then(setPeers);
   }, [activeTab]);
 
   const loadUsers = () => {
@@ -157,10 +157,10 @@ const Settings = () => {
       setIsSyncing(true);
       setSyncLog(prev => [`Connecting to ${peer}...`, ...prev]);
       try {
-          const stats = await syncService.syncWithPeer(peer);
+          const stats = await lanSyncService.syncWithPeer(peer, user?.id || 1);
           setSyncLog(prev => [`Sync Complete: Added ${stats.added}, Updated ${stats.updated}, Conflicts ${stats.conflicts}`, ...prev]);
       } catch (e) {
-          setSyncLog(prev => [`Error syncing with ${peer}`, ...prev]);
+          setSyncLog(prev => [`Error syncing with ${peer}: ${e}`, ...prev]);
       }
       setIsSyncing(false);
   };

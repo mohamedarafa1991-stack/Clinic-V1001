@@ -1,0 +1,98 @@
+MEDICORE CLINIC MANAGEMENT SYSTEM
+PROPRIETARY SOFTWARE LICENSE AGREEMENT
+
+Copyright (c) 2024 MediCore. All Rights Reserved.
+
+IMPORTANT - READ CAREFULLY: This License Agreement ("Agreement") is a legal agreement 
+between you (either an individual or a single entity) and MediCore for the software 
+product identified above, which includes computer software and may include associated 
+media, printed materials, and "online" or electronic documentation ("SOFTWARE").
+
+By installing, copying, or otherwise using the SOFTWARE, you agree to be bound by the 
+terms of this Agreement. If you do not agree to the terms of this Agreement, do not 
+install or use the SOFTWARE.
+
+1. GRANT OF LICENSE
+   MediCore grants you a non-exclusive, non-transferable license to use the SOFTWARE 
+   in accordance with the terms and conditions of this Agreement.
+
+2. PERMITTED USES
+   You may:
+   - Install and use the SOFTWARE on computers within your licensed clinic/facility
+   - Make backup copies for archival purposes only
+   - Use the SOFTWARE in installed or portable mode as documented
+
+3. RESTRICTIONS
+   You may NOT:
+   - Distribute, rent, lease, or sublicense the SOFTWARE
+   - Reverse engineer, decompile, or disassemble the SOFTWARE
+   - Remove or alter any copyright, trademark, or proprietary notices
+   - Use the SOFTWARE to provide services to third parties
+   - Share your license with other clinics or facilities
+
+4. INTELLECTUAL PROPERTY
+   The SOFTWARE is protected by copyright laws and international copyright treaties, 
+   as well as other intellectual property laws and treaties. MediCore retains all 
+   rights, title, and interest in and to the SOFTWARE.
+
+5. DATA PRIVACY & SECURITY
+   You acknowledge that you are responsible for:
+   - Ensuring compliance with applicable data protection regulations (HIPAA, GDPR, etc.)
+   - Maintaining appropriate security measures for patient data
+   - Regular backups of your clinic data
+   - User access controls and password policies
+
+6. CONFIDENTIAL INFORMATION
+   The SOFTWARE contains proprietary and confidential information. You agree to 
+   maintain the confidentiality of the SOFTWARE and not disclose it to third parties.
+
+7. WARRANTY DISCLAIMER
+   THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR 
+   IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, 
+   FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. MEDICORE DOES NOT WARRANT 
+   THAT THE SOFTWARE WILL MEET YOUR REQUIREMENTS OR THAT THE OPERATION OF THE SOFTWARE 
+   WILL BE UNINTERRUPTED OR ERROR-FREE.
+
+8. LIMITATION OF LIABILITY
+   IN NO EVENT SHALL MEDICORE BE LIABLE FOR ANY SPECIAL, INCIDENTAL, INDIRECT, OR 
+   CONSEQUENTIAL DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR LOSS 
+   OF BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS OF BUSINESS INFORMATION, OR ANY 
+   OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE.
+
+9. TERMINATION
+   This Agreement is effective until terminated. Your rights under this Agreement 
+   will terminate automatically without notice if you fail to comply with any term(s) 
+   of this Agreement. Upon termination, you must destroy all copies of the SOFTWARE.
+
+10. MEDICAL DISCLAIMER
+    THE SOFTWARE IS A CLINIC MANAGEMENT TOOL AND SHOULD NOT BE USED AS THE SOLE BASIS 
+    FOR MEDICAL DECISIONS. ALL CLINICAL DECISIONS REMAIN THE RESPONSIBILITY OF 
+    LICENSED HEALTHCARE PROFESSIONALS. MEDICORE ASSUMES NO LIABILITY FOR MEDICAL 
+    OUTCOMES OR CLINICAL DECISIONS MADE USING THIS SOFTWARE.
+
+11. UPDATES & SUPPORT
+    MediCore may provide updates, patches, or new versions of the SOFTWARE at its 
+    sole discretion. Support services, if any, are provided as described in your 
+    support agreement.
+
+12. COMPLIANCE
+    You agree to comply with all applicable laws and regulations in your use of 
+    the SOFTWARE, including but not limited to data protection, medical records, 
+    and healthcare privacy laws.
+
+13. GOVERNING LAW
+    This Agreement shall be governed by the laws of [Jurisdiction], without regard 
+    to its conflict of law provisions.
+
+14. ENTIRE AGREEMENT
+    This Agreement constitutes the entire agreement between you and MediCore and 
+    supersedes all prior or contemporaneous understandings regarding such subject 
+    matter.
+
+FOR QUESTIONS REGARDING THIS LICENSE, CONTACT:
+Email: legal@medicore.com
+Website: https://www.medicore.com
+
+ACKNOWLEDGMENT
+BY INSTALLING OR USING THE SOFTWARE, YOU ACKNOWLEDGE THAT YOU HAVE READ THIS 
+AGREEMENT, UNDERSTAND IT, AND AGREE TO BE BOUND BY ITS TERMS AND CONDITIONS.

@@ -23,4 +23,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // H. App Info
   getVersion: () => ipcRenderer.invoke('get-version'),
+  getStorageInfo: () => ipcRenderer.invoke('get-storage-info'),
 });

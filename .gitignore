@@ -1,3 +1,15 @@
+# Dependencies
+node_modules
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+dist
+dist-ssr
+build
+out
+*.tsbuildinfo
+
 # Logs
 logs
 *.log
@@ -7,14 +19,31 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database files (local development)
+*.sqlite
+*.db
+*.enc
+secure.key
+
+# Backups
+backups/
+*.backup
+
+# Electron
+electron/dist
+electron/build
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea
 .DS_Store
 *.suo
@@ -22,3 +51,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+*.swp
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Local development
+*.local
